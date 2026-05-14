@@ -91,6 +91,16 @@ export async function getRelevantMemory(keywords: string[]): Promise<Triplet[]> 
 }
 
 /**
+ * Delete a triplet
+ */
+export async function deleteTriplet(subject: string, predicate: string, object: string) {
+  await client.execute({
+    sql: "DELETE FROM triplets WHERE subject = ? AND predicate = ? AND object = ?",
+    args: [subject, predicate, object],
+  });
+}
+
+/**
  * Store a chat message
  */
 export async function storeMessage(threadId: string, role: string, content: string) {
