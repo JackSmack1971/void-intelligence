@@ -1,65 +1,164 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import ChatInput from "@/components/ChatInput";
+import { FeatureCard } from "@/components/FeatureCard";
+import { MessageSquare, Sparkles, Code, BarChart3, Bot, ChevronRight } from "lucide-react";
+import { processChat } from "./actions";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  status?: string;
+}
 
 export default function Home() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<string>("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, currentStatus]);
+
+  const handleSend = async (query: string) => {
+    if (!query.trim()) return;
+
+    const userMessage: Message = { role: "user", content: query };
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setCurrentStatus("Initializing Graph-of-Agents...");
+
+    try {
+      // Note: Real streaming would use a Route Handler (API) with SSE.
+      // For this demo, we use a server action that returns the full result.
+      const result = await processChat(query);
+      
+      if (result.success && result.data) {
+        const assistantMessage: Message = { 
+          role: "assistant", 
+          content: result.data.finalResponse 
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } else {
+        setMessages(prev => [...prev, { 
+          role: "assistant", 
+          content: `Error: ${result.error || "Failed to process request"}` 
+        }]);
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, { 
+        role: "assistant", 
+        content: "An unexpected error occurred. Please try again." 
+      }]);
+    } finally {
+      setIsLoading(false);
+      setCurrentStatus("");
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="flex-1 flex flex-col h-screen overflow-hidden bg-gray-950 relative">
+      {/* Background Glow */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full"></div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-8 space-y-6 scrollbar-hide">
+        {messages.length === 0 ? (
+          <div className="max-w-3xl mx-auto mt-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            <h1 className="text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] via-[#6D28D9] to-[#DB2777]">
+              Void Intelligence
+            </h1>
+            <p className="text-gray-400 text-lg mb-12">
+              Your private intelligence graph in absolute darkness.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+              <FeatureCard
+                icon={<MessageSquare className="w-5 h-5 text-blue-400" />}
+                title="Adaptive Reasoning"
+                description="GoA architecture scales logic based on query complexity."
+                iconColor="bg-blue-500/10"
+              />
+              <FeatureCard
+                icon={<Sparkles className="w-5 h-5 text-purple-400" />}
+                title="Knowledge Graph"
+                description="Every conversation builds your personal intelligence store."
+                iconColor="bg-purple-500/10"
+              />
+              <FeatureCard
+                icon={<Code className="w-5 h-5 text-pink-400" />}
+                title="Zero-Cost Logic"
+                description="Powered by the elite OpenRouter free-tier ecosystem."
+                iconColor="bg-pink-500/10"
+              />
+              <FeatureCard
+                icon={<BarChart3 className="w-5 h-5 text-green-400" />}
+                title="Privacy First"
+                description="Local-first storage with client-side PII redaction."
+                iconColor="bg-green-500/10"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto space-y-8">
+            {messages.map((msg, i) => (
+              <div 
+                key={i} 
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+              >
+                <div className={`
+                  max-w-[85%] px-5 py-3 rounded-md text-sm leading-relaxed
+                  ${msg.role === "user" 
+                    ? "bg-blue-600 text-white" 
+                    : "bg-gray-800/50 backdrop-blur-md border border-gray-700/50 text-gray-200"
+                  }
+                `}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            
+            {isLoading && (
+              <div className="flex justify-start animate-in fade-in duration-300">
+                <div className="bg-gray-800/50 backdrop-blur-md border border-gray-700/50 rounded-md p-4 flex items-center space-x-3 text-sm text-gray-400">
+                  <div className="relative">
+                    <Bot className="w-5 h-5 text-purple-500 animate-pulse" />
+                    <div className="absolute inset-0 bg-purple-500/20 blur-md rounded-full"></div>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="flex items-center">
+                      {currentStatus}
+                      <span className="ml-2 flex space-x-1">
+                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                        <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"></span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 bg-gray-950/80 backdrop-blur-xl border-t border-gray-800/50">
+        <div className="max-w-4xl mx-auto">
+          <ChatInput onSend={handleSend} disabled={isLoading} />
+          <p className="text-[10px] text-center text-gray-600 mt-2 uppercase tracking-widest font-medium">
+            GoA v1.0 • Privacy Redaction Active • Powered by OpenRouter
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
