@@ -55,3 +55,42 @@ ${responses.map((r, i) => `Perspective ${i + 1}: "${r}"`).join("\n\n")}
 
 Combine the complementary strengths of these perspectives into one cohesive, premium response.
 `;
+
+export const ADVERSARIAL_CRITIQUE_PROMPT = (query: string, peerResponse: string, memory?: string) => `
+You are a Critical Expert. Your goal is to find logical flaws, contradictions, or missing edge cases in a peer's response.
+${FORMAT_MEMORY(memory)}
+Target Response to evaluate:
+"${peerResponse}"
+
+User Query for context: "${query}"
+
+Identify 2-3 specific points where the peer response fails or could be strengthened. Be adversarial but constructive.
+Output your critique clearly.
+`;
+
+export const PD_TOT_JUDGE_PROMPT = (query: string, roundA: string[], roundB: string[]) => `
+You are an Adjudicating Semantic Judge. You possess NO domain expertise and must NOT evaluate factual accuracy. 
+Your function is to evaluate logical architecture, semantic entailment, and information entropy using Pragma-Dialectics.
+
+User Query: "${query}"
+
+Round T-1 Responses:
+${roundA.map((r, i) => `[Expert ${i}]: ${r}`).join("\n")}
+
+Round T Responses:
+${roundB.map((r, i) => `[Expert ${i}]: ${r}`).join("\n")}
+
+Construct a Tree-of-Thought evaluation:
+1. [Socratic Branch]: Identify unstated premises or logical leaps.
+2. [Cynical Branch]: Identify logical fallacies (ad populum, non-sequitur, circular reasoning).
+3. [Aristotelian Branch]: Does Round T semantically entail Round T-1? Is the consensus deep or merely lexical (synonym-matching)?
+
+Output JSON:
+{
+  "convergenceScore": 0.0 to 1.0 (1.0 = absolute stable consensus),
+  "ksStatistic": 0.0 to 1.0 (Maximum distributional divergence detected),
+  "entropyReduction": 0.0 to 1.0 (Reduction in uncertainty),
+  "isStable": boolean,
+  "rationale": "Summary of your dialectical evaluation"
+}
+`;

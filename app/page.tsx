@@ -42,8 +42,9 @@ export default function Home() {
       if (result.success && result.data) {
         const assistantMessage: Message = { 
           role: "assistant", 
-          content: result.data.finalResponse 
-        };
+          content: result.data.finalResponse,
+          metrics: result.data.metrics
+        } as any;
         setMessages(prev => [...prev, assistantMessage]);
         
         // Trigger extraction status (matches 5s server debounce)
@@ -122,13 +123,33 @@ export default function Home() {
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
               >
                 <div className={`
-                  max-w-[85%] px-5 py-3 rounded-md text-sm leading-relaxed
+                  max-w-[85%] px-5 py-3 rounded-md text-sm leading-relaxed relative group
                   ${msg.role === "user" 
                     ? "bg-blue-600 text-white" 
                     : "bg-gray-800/50 backdrop-blur-md border border-gray-700/50 text-gray-200"
                   }
                 `}>
                   {msg.content}
+                  
+                  {msg.role === "assistant" && (msg as any).metrics && (
+                    <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-medium">
+                      <div className="flex items-center space-x-4">
+                        <span className="flex items-center">
+                          <BarChart3 className="w-3 h-3 mr-1 text-blue-400" />
+                          Stability: {((1 - (msg as any).metrics.ksStatistic) * 100).toFixed(0)}%
+                        </span>
+                        <span className="flex items-center">
+                          <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
+                          Entropy: -{((msg as any).metrics.entropyReduction) * 100}%
+                        </span>
+                        <span className="flex items-center">
+                          <ChevronRight className="w-3 h-3 mr-1 text-pink-400" />
+                          Turns: {(msg as any).metrics.iterations}
+                        </span>
+                      </div>
+                      <span className="text-green-500/80">Consensus Reached</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -163,7 +184,7 @@ export default function Home() {
             {isExtracting && (
               <div className="flex items-center space-x-2 text-[10px] text-purple-400 animate-pulse uppercase tracking-[0.2em] font-bold bg-purple-500/5 px-4 py-1 rounded-full border border-purple-500/10 w-fit mx-auto mb-2">
                 <Sparkles className="w-3 h-3" />
-                <span>Synchronizing Intelligence to Void...</span>
+                <span>Refining Void Topology & Synchronizing Intelligence...</span>
               </div>
             )}
             <ChatInput onSend={handleSend} disabled={isLoading} />

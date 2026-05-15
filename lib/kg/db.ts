@@ -100,6 +100,41 @@ export async function getRelevantMemory(keywords: string[]): Promise<Triplet[]> 
 }
 
 /**
+ * Retrieve a batch of triplets with IDs for consolidation
+ */
+export async function getConsolidationBatch(limit: number = 50): Promise<(Triplet & { id: number })[]> {
+  const result = await client.execute({
+    sql: "SELECT id, subject, predicate, object FROM triplets ORDER BY timestamp ASC LIMIT ?",
+    args: [limit]
+  });
+  return result.rows.map(row => ({
+    id: row.id as number,
+    subject: row.subject as string,
+    predicate: row.predicate as string,
+    object: row.object as string,
+  }));
+}
+
+/**
+ * Atomicly swap old triplets for new consolidated ones.
+ */
+export async function consolidateTriplets(oldIds: number[], newTriplets: Triplet[]) {
+  if (oldIds.length === 0) return;
+
+  const deleteStmts = oldIds.map(id => ({
+    sql: "DELETE FROM triplets WHERE id = ?",
+    args: [id]
+  }));
+
+  const insertStmts = newTriplets.map(t => ({
+    sql: "INSERT INTO triplets (subject, predicate, object) VALUES (?, ?, ?)",
+    args: [t.subject, t.predicate, t.object]
+  }));
+
+  await client.batch([...deleteStmts, ...insertStmts], "write");
+}
+
+/**
  * Delete a triplet
  */
 export async function deleteTriplet(subject: string, predicate: string, object: string) {

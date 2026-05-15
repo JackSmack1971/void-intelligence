@@ -26,10 +26,19 @@ export interface AdjacencyMatrix {
   };
 }
 
+export interface ConvergenceMetrics {
+  ksStatistic: number;
+  entropyReduction: number;
+  iterations: number;
+  isStable: boolean;
+}
+
 export interface GoAResult {
   finalResponse: string;
   selectedAgents: ModelCard[];
   matrix: AdjacencyMatrix;
   sourceNodes: string[];
   targetNodes: string[];
+  metrics?: ConvergenceMetrics;
+  debateLog?: { turn: number; model: string; content: string }[];
 }

@@ -1,5 +1,6 @@
 import { extractTriplets } from "./extraction";
 import { storeTriplets } from "./db";
+import { runConsolidation } from "./consolidation";
 
 /**
  * Singleton queue for Knowledge Graph extraction with debouncing.
@@ -9,6 +10,7 @@ class ExtractionQueue {
   private static instance: ExtractionQueue;
   private timers: Map<string, NodeJS.Timeout> = new Map();
   private transcripts: Map<string, string> = new Map();
+  private extractionCount: number = 0;
 
   private constructor() {}
 
@@ -55,6 +57,12 @@ class ExtractionQueue {
       if (triplets.length > 0) {
         console.log(`[Queue] Successfully extracted ${triplets.length} triplets for thread: ${threadId}`);
         await storeTriplets(triplets);
+        
+        this.extractionCount++;
+        // Trigger consolidation after every 3 extractions (lowered for demo visibility)
+        if (this.extractionCount % 3 === 0) {
+          await runConsolidation();
+        }
       } else {
         console.log(`[Queue] No triplets found for thread: ${threadId}`);
       }

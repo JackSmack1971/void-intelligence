@@ -1,16 +1,20 @@
 import { chatWithRetry, streamChat } from "../openrouter/client";
-import { ModelCard, GoAContext, AdjacencyMatrix, GoAResult, AgentResponse } from "./types";
+import { ModelCard, GoAContext, AdjacencyMatrix, GoAResult, AgentResponse, ConvergenceMetrics } from "./types";
 import {
   NODE_SAMPLING_PROMPT,
   RELEVANCE_SCORING_PROMPT,
   REFINEMENT_PROMPT,
-  POOLING_SYNTHESIS_PROMPT
+  POOLING_SYNTHESIS_PROMPT,
+  ADVERSARIAL_CRITIQUE_PROMPT,
+  PD_TOT_JUDGE_PROMPT
 } from "./prompts";
 import { extractionQueue } from "../kg/queue";
 import { getRelevantMemory } from "../kg/db";
 import { Telemetry } from "../utils/telemetry";
+import { computeKSStatistic, computeEntropyReduction, evaluateStability } from "./stability";
 
 const META_MODEL = "inclusionai/ring-2.6-1t:free";
+const JUDGE_MODEL = "deepseek/deepseek-v4-flash"; // Recommended for meta-reasoning in 2026 report
 
 /**
  * Stage 0: Memory Retrieval
@@ -43,7 +47,6 @@ function calculateVariance(matrix: AdjacencyMatrix): number {
 }
 
 function getDynamicK(query: string, defaultK: number): number {
-  // Simple heuristic: complex queries (many words or technical terms) get more agents
   const words = query.split(/\s+/).length;
   if (words > 20) return Math.min(defaultK + 2, 5);
   if (words < 5) return Math.max(defaultK - 1, 2);
@@ -73,9 +76,6 @@ export async function runGoA(
 
   if (memoryContext) {
     options.onStatus?.("Memory Synchronized ✓");
-    console.log(`[GoA] Memory integrated: ${memoryTriplets.length} facts found.`);
-  } else {
-    options.onStatus?.("No relevant memory found.");
   }
 
   // --- Stage 1: Node Sampling ---
@@ -85,7 +85,6 @@ export async function runGoA(
   );
   const { selected_ids } = JSON.parse(samplingResponse);
   const selectedAgents = allCards.filter(c => selected_ids.includes(c.id));
-  console.log(`[GoA] Selected agents: ${selectedAgents.map(a => a.name).join(", ")}`);
   Telemetry.logStage("Node Sampling");
   options.onStatus?.("Experts generating initial responses...");
 
@@ -107,7 +106,6 @@ export async function runGoA(
       await Promise.all(
         selectedAgents.map(async targetAgent => {
           if (sourceAgent.id === targetAgent.id) return;
-
           const targetResponse = initResponses.find(r => r.agentId === targetAgent.id)!.content;
           const scoreJson = await chatWithRetry(
             [{ role: "user", content: RELEVANCE_SCORING_PROMPT(query, targetResponse, memoryContext) }],
@@ -122,10 +120,7 @@ export async function runGoA(
   Telemetry.logStage("Cross-Evaluation");
 
   const variance = calculateVariance(matrix);
-  Telemetry.logMetric("Adjacency Variance", variance);
-
   if (variance < 0.15) {
-    console.log("[GoA] High consensus detected (variance < 0.15). Skipping refinement.");
     options.onStatus?.("High consensus detected. Finalizing...");
     const bestAgentId = Object.keys(matrix).reduce((a, b) => {
       const scoreA = Object.values(matrix[a] || {}).reduce((sum, s) => sum + s, 0);
@@ -133,136 +128,92 @@ export async function runGoA(
       return scoreA > scoreB ? a : b;
     });
     const bestResponse = initResponses.find(r => r.agentId === bestAgentId)!.content;
-    
-    // Simulate Stage 5 & 6 for this path
     return finalizeGoA(query, bestResponse, selectedAgents, matrix, [], [], options);
   }
 
-  // Partition by centrality (simplified: sum of incoming scores)
-  const centrality: Record<string, number> = {};
-  selectedAgents.forEach(a => (centrality[a.id] = 0));
-  for (const sourceId in matrix) {
-    for (const targetId in matrix[sourceId]) {
-      centrality[targetId] += matrix[sourceId][targetId];
-    }
-  }
-
-  const sortedIds = Object.keys(centrality).sort((a, b) => centrality[b] - centrality[a]);
-  const sourceNodes = sortedIds.slice(0, Math.ceil(k / 2));
-  const targetNodes = sortedIds.slice(Math.ceil(k / 2));
-  console.log(`[GoA] Partition: Sources [${sourceNodes.join(", ")}], Targets [${targetNodes.join(", ")}]`);
-
-  // --- Stage 4: Iterative Bidirectional Message Passing ---
-  options.onStatus?.("Experts refining their perspectives...");
-  
+  // --- Stage 4: Adversarial Debate ---
+  options.onStatus?.("Initiating Adversarial Debate...");
+  const debateLog: { turn: number; model: string; content: string }[] = [];
   let currentResponses = initResponses;
   let iterations = 0;
-  const MAX_ITERATIONS = 2;
-  const TAU_DELTA = 0.02;
+  const MAX_ITERATIONS = 3;
+  let metrics: ConvergenceMetrics = { ksStatistic: 1, entropyReduction: 0, iterations: 0, isStable: false };
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
-    console.log(`[GoA] Refinement Iteration ${iterations}`);
-
-    // Phase A: Forward Pass (Source -> Target)
-    const forwardResponses: AgentResponse[] = await Promise.all(
-      targetNodes.map(async tId => {
-        const initialResponse = currentResponses.find(r => r.agentId === tId)!.content;
-        const sourceContexts = sourceNodes
-          .filter(sId => matrix[sId][tId] > tau)
-          .map(sId => currentResponses.find(r => r.agentId === sId)!.content);
-
-        const refined = await chatWithRetry(
-          [{ role: "user", content: REFINEMENT_PROMPT(query, initialResponse, sourceContexts, memoryContext) }],
-          { model: tId, intent: "refinement" }
+    options.onStatus?.(`Debate Round ${iterations}: Critiquing...`);
+    
+    // 1. Critique Phase (Parallel)
+    const critiques: string[] = await Promise.all(
+      currentResponses.map(async (resp, i) => {
+        const peerIdx = (i + 1) % currentResponses.length;
+        const critique = await chatWithRetry(
+          [{ role: "user", content: ADVERSARIAL_CRITIQUE_PROMPT(query, currentResponses[peerIdx].content, memoryContext) }],
+          { model: resp.agentId, intent: "refinement" }
         );
-        return { agentId: tId, content: refined };
+        debateLog.push({ turn: iterations, model: resp.agentId, content: `Critique of ${currentResponses[peerIdx].agentId}: ${critique}` });
+        return critique;
       })
     );
 
-    // Phase B: Reverse Pass (Target -> Source)
-    const reverseResponses: AgentResponse[] = await Promise.all(
-      sourceNodes.map(async sId => {
-        const initialResponse = currentResponses.find(r => r.agentId === sId)!.content;
-        const targetContexts = targetNodes
-          .filter(tId => matrix[tId][sId] > tau)
-          .map(tId => forwardResponses.find(r => r.agentId === tId)!.content);
-
+    // 2. Refinement Phase (Synthesis of critiques)
+    options.onStatus?.(`Debate Round ${iterations}: Refining...`);
+    const newResponses: AgentResponse[] = await Promise.all(
+      currentResponses.map(async (resp, i) => {
+        const myCritique = critiques[i];
+        const peerCritiqueOfMe = critiques[(i - 1 + currentResponses.length) % currentResponses.length];
         const refined = await chatWithRetry(
-          [{ role: "user", content: REFINEMENT_PROMPT(query, initialResponse, targetContexts, memoryContext) }],
-          { model: sId, intent: "refinement" }
+          [{ role: "user", content: REFINEMENT_PROMPT(query, resp.content, [myCritique, peerCritiqueOfMe], memoryContext) }],
+          { model: resp.agentId, intent: "refinement" }
         );
-        return { agentId: sId, content: refined };
+        return { agentId: resp.agentId, content: refined };
       })
     );
 
-    const newResponses = [...reverseResponses, ...forwardResponses];
+    // 3. Adjudication Phase (Semantic Judge)
+    options.onStatus?.(`Debate Round ${iterations}: Adjudicating...`);
+    const judgeResponse = await chatWithRetry(
+      [{ role: "user", content: PD_TOT_JUDGE_PROMPT(query, currentResponses.map(r => r.content), newResponses.map(r => r.content)) }],
+      { model: JUDGE_MODEL, intent: "scoring", json_mode: true }
+    );
+    const judgeResult = JSON.parse(judgeResponse);
     
-    // Check for convergence (simplified: average content length change)
-    const oldLen = currentResponses.reduce((sum, r) => sum + r.content.length, 0) / currentResponses.length;
-    const newLen = newResponses.reduce((sum, r) => sum + r.content.length, 0) / newResponses.length;
-    const delta = Math.abs(newLen - oldLen) / oldLen;
-    
+    metrics = {
+      ksStatistic: judgeResult.ksStatistic,
+      entropyReduction: judgeResult.entropyReduction,
+      iterations,
+      isStable: judgeResult.isStable
+    };
+
     currentResponses = newResponses;
-    Telemetry.logStage(`Refinement Iteration ${iterations}`);
+    Telemetry.logStage(`Debate Iteration ${iterations}`);
+    options.onStatus?.(`Stability: ${(1 - metrics.ksStatistic).toFixed(2)} | Reduction: ${metrics.entropyReduction.toFixed(4)}`);
 
-    if (delta < TAU_DELTA) {
-      console.log(`[GoA] Convergence reached at iteration ${iterations} (delta=${delta.toFixed(4)})`);
+    if (metrics.isStable) {
+      console.log(`[GoA] Consensus reached via Semantic Judge at round ${iterations}`);
       break;
     }
   }
 
-  const allFinal = currentResponses;
-
-  // --- Stage 5: Pooling ---
-  options.onStatus?.("Synthesizing final intelligence...");
+  // --- Stage 5: Final Synthesis ---
+  options.onStatus?.("Synthesizing void consensus...");
   let finalResponse = "";
-  if (pooling === "max") {
-    // GoA-Max: Meta-LLM selects best
-    const bestResponseJson = await chatWithRetry(
-      [
-        {
-          role: "user",
-          content: `Select the best response from the following:\n${allFinal
-            .map((r, i) => `Option ${i + 1}: ${r.content}`)
-            .join("\n\n")}\nRespond with JSON: {"best_index": 0}`
-        }
-      ],
-      { intent: "scoring", json_mode: true }
+  if (options.onFinalToken) {
+    await streamChat(
+      [{ role: "user", content: POOLING_SYNTHESIS_PROMPT(query, currentResponses.map(r => r.content), memoryContext) }],
+      { intent: "synthesis" },
+      options.onFinalToken
     );
-    const { best_index } = JSON.parse(bestResponseJson);
-    finalResponse = allFinal[best_index].content;
-    if (options.onFinalToken) {
-      // Simulate streaming for pre-generated best response
-      const tokens = finalResponse.split(" ");
-      for (const token of tokens) {
-        options.onFinalToken(token + " ");
-        await new Promise(r => setTimeout(r, 20));
-      }
-    }
   } else {
-    // GoA-Mean: Synthesis (Actual Streaming)
-    if (options.onFinalToken) {
-      await streamChat(
-        [{ role: "user", content: POOLING_SYNTHESIS_PROMPT(query, allFinal.map(r => r.content), memoryContext) }],
-        { intent: "synthesis" },
-        options.onFinalToken
-      );
-    } else {
-      finalResponse = await chatWithRetry(
-        [{ role: "user", content: POOLING_SYNTHESIS_PROMPT(query, allFinal.map(r => r.content), memoryContext) }],
-        { intent: "synthesis" }
-      );
-    }
+    finalResponse = await chatWithRetry(
+      [{ role: "user", content: POOLING_SYNTHESIS_PROMPT(query, currentResponses.map(r => r.content), memoryContext) }],
+      { intent: "synthesis" }
+    );
   }
-  Telemetry.logStage("Synthesis");
 
-  return finalizeGoA(query, finalResponse, selectedAgents, matrix, sourceNodes, targetNodes, options);
+  return finalizeGoA(query, finalResponse, selectedAgents, matrix, [], [], options, metrics, debateLog);
 }
 
-/**
- * Shared finalization logic for both normal and skip-refinement paths.
- */
 async function finalizeGoA(
   query: string,
   finalResponse: string,
@@ -270,18 +221,20 @@ async function finalizeGoA(
   matrix: AdjacencyMatrix,
   sourceNodes: string[],
   targetNodes: string[],
-  options: any
+  options: any,
+  metrics?: ConvergenceMetrics,
+  debateLog?: { turn: number; model: string; content: string }[]
 ): Promise<GoAResult> {
-  // --- Stage 6: Knowledge Extraction (Async/Debounced) ---
   const transcript = `User: ${query}\nAssistant: ${finalResponse}`;
-  const threadId = options.threadId || "global-thread";
-  extractionQueue.enqueue(threadId, transcript);
+  extractionQueue.enqueue(options.threadId || "global-thread", transcript);
 
   return {
     finalResponse,
     selectedAgents,
     matrix,
     sourceNodes,
-    targetNodes
+    targetNodes,
+    metrics,
+    debateLog
   };
 }
