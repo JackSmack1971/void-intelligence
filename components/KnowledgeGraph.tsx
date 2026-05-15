@@ -44,8 +44,12 @@ function GraphInner({ initialTriplets }: Props) {
     setActivePredicates(new Set(allPredicates));
   }, [allPredicates]);
 
-  // Map triplets to nodes and edges with filtering and coloring
-  const { initialNodes, initialEdges } = useMemo(() => {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [isLayouting, setIsLayouting] = useState(false);
+
+  // Layouting via Web Worker
+  useEffect(() => {
     const nodesMap = new Map<string, Node>();
     const edgesList: Edge[] = [];
 
@@ -57,15 +61,13 @@ function GraphInner({ initialTriplets }: Props) {
        t.predicate.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    filteredTriplets.forEach((t, i) => {
+    filteredTriplets.forEach((t) => {
       const color = getPredicateColor(t.predicate);
-
-      // Add subject node
       if (!nodesMap.has(t.subject)) {
         nodesMap.set(t.subject, {
           id: t.subject,
           data: { label: t.subject },
-          position: { x: Math.random() * 800, y: Math.random() * 600 },
+          position: { x: 0, y: 0 },
           style: {
             background: 'rgba(15, 23, 42, 0.8)',
             color: '#f8fafc',
@@ -80,13 +82,11 @@ function GraphInner({ initialTriplets }: Props) {
           },
         });
       }
-
-      // Add object node with predicate-based border
       if (!nodesMap.has(t.object)) {
         nodesMap.set(t.object, {
           id: t.object,
           data: { label: t.object },
-          position: { x: Math.random() * 800, y: Math.random() * 600 },
+          position: { x: 0, y: 0 },
           style: {
             background: 'rgba(15, 23, 42, 0.8)',
             color: '#f8fafc',
@@ -101,8 +101,6 @@ function GraphInner({ initialTriplets }: Props) {
           },
         });
       }
-
-      // Add edge
       edgesList.push({
         id: `e-${t.subject}-${t.predicate}-${t.object}`,
         source: t.subject,
@@ -111,24 +109,30 @@ function GraphInner({ initialTriplets }: Props) {
         labelStyle: { fill: color, fontSize: '9px', fontWeight: 'bold' },
         style: { stroke: color, strokeWidth: 2, opacity: 0.8 },
         data: { triplet: t },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: color,
-        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: color },
       });
     });
 
-    return { initialNodes: Array.from(nodesMap.values()), initialEdges: edgesList };
-  }, [triplets, activePredicates, searchQuery]);
+    const rawNodes = Array.from(nodesMap.values());
+    if (rawNodes.length === 0) {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+    setIsLayouting(true);
+    const worker = new Worker(new URL('@/lib/utils/layout.worker.ts', import.meta.url));
+    worker.postMessage({ nodes: rawNodes, edges: edgesList });
+    
+    worker.onmessage = (e) => {
+      setNodes(e.data.nodes);
+      setEdges(e.data.edges);
+      setIsLayouting(false);
+      worker.terminate();
+    };
 
-  // Sync state when filtered
-  useEffect(() => {
-    setNodes(initialNodes);
-    setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+    return () => worker.terminate();
+  }, [triplets, activePredicates, searchQuery, setNodes, setEdges]);
 
   const handleDelete = useCallback(async (triplet: Triplet) => {
     // Optimistic UI update
@@ -281,8 +285,15 @@ function GraphInner({ initialTriplets }: Props) {
         </Panel>
 
         <Panel position="bottom-left">
-          <div className="text-[9px] uppercase tracking-[0.2em] font-medium text-gray-600 bg-black/40 px-3 py-1 rounded-full border border-white/5">
-            Knowledge Visualization Layer • Interactive Pruning Active
+          <div className="flex flex-col gap-1">
+            {isLayouting && (
+              <div className="text-[10px] text-purple-400 animate-pulse bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20 w-fit">
+                Recalculating Void Topology...
+              </div>
+            )}
+            <div className="text-[9px] uppercase tracking-[0.2em] font-medium text-gray-600 bg-black/40 px-3 py-1 rounded-full border border-white/5">
+              Knowledge Visualization Layer • Interactive Pruning Active
+            </div>
           </div>
         </Panel>
 

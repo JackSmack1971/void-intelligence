@@ -16,7 +16,9 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string>("");
+  const [isExtracting, setIsExtracting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const extractionTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -35,8 +37,6 @@ export default function Home() {
     setCurrentStatus("Initializing Graph-of-Agents...");
 
     try {
-      // Note: Real streaming would use a Route Handler (API) with SSE.
-      // For this demo, we use a server action that returns the full result.
       const result = await processChat(query);
       
       if (result.success && result.data) {
@@ -45,6 +45,13 @@ export default function Home() {
           content: result.data.finalResponse 
         };
         setMessages(prev => [...prev, assistantMessage]);
+        
+        // Trigger extraction status (matches 5s server debounce)
+        setIsExtracting(true);
+        if (extractionTimerRef.current) clearTimeout(extractionTimerRef.current);
+        extractionTimerRef.current = setTimeout(() => {
+          setIsExtracting(false);
+        }, 6000); // 5s + 1s buffer
       } else {
         setMessages(prev => [...prev, { 
           role: "assistant", 
@@ -153,7 +160,13 @@ export default function Home() {
 
       <div className="p-4 bg-gray-950/80 backdrop-blur-xl border-t border-gray-800/50">
         <div className="max-w-4xl mx-auto">
-          <ChatInput onSend={handleSend} disabled={isLoading} />
+            {isExtracting && (
+              <div className="flex items-center space-x-2 text-[10px] text-purple-400 animate-pulse uppercase tracking-[0.2em] font-bold bg-purple-500/5 px-4 py-1 rounded-full border border-purple-500/10 w-fit mx-auto mb-2">
+                <Sparkles className="w-3 h-3" />
+                <span>Synchronizing Intelligence to Void...</span>
+              </div>
+            )}
+            <ChatInput onSend={handleSend} disabled={isLoading} />
           <p className="text-[10px] text-center text-gray-600 mt-2 uppercase tracking-widest font-medium">
             GoA v1.0 • Privacy Redaction Active • Powered by OpenRouter
           </p>

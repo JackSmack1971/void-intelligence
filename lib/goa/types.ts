@@ -17,6 +17,7 @@ export interface GoAContext {
   k: number;
   tau: number;
   pooling: "max" | "mean";
+  threadId?: string;
 }
 
 export interface AdjacencyMatrix {

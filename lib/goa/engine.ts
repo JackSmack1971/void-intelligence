@@ -6,8 +6,8 @@ import {
   REFINEMENT_PROMPT,
   POOLING_SYNTHESIS_PROMPT
 } from "./prompts";
-import { extractTriplets } from "../kg/extraction";
-import { storeTriplets, getRelevantMemory } from "../kg/db";
+import { extractionQueue } from "../kg/queue";
+import { getRelevantMemory } from "../kg/db";
 import { Telemetry } from "../utils/telemetry";
 
 const META_MODEL = "inclusionai/ring-2.6-1t:free";
@@ -272,14 +272,10 @@ async function finalizeGoA(
   targetNodes: string[],
   options: any
 ): Promise<GoAResult> {
-  // --- Stage 6: Knowledge Extraction (Async) ---
+  // --- Stage 6: Knowledge Extraction (Async/Debounced) ---
   const transcript = `User: ${query}\nAssistant: ${finalResponse}`;
-  extractTriplets(transcript).then(triplets => {
-    if (triplets.length > 0) {
-      console.log(`[GoA] Extracted ${triplets.length} triplets.`);
-      storeTriplets(triplets).catch(err => console.error("Failed to store triplets:", err));
-    }
-  }).catch(err => console.error("Extraction failed:", err));
+  const threadId = options.threadId || "global-thread";
+  extractionQueue.enqueue(threadId, transcript);
 
   return {
     finalResponse,
