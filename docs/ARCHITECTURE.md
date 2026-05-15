@@ -6,19 +6,22 @@ Void Intelligence utilizes a **Graph-of-Agents (GoA)** framework to overcome the
 
 The core reasoning engine (`lib/goa/engine.ts`) follows a strict 5-stage deterministic pipeline:
 
-1.  **Node Sampling**: A Meta-LLM (`ring-2.6-1t`) selects the most relevant experts based on the query and personalized memory.
-2.  **Initial Generation**: Selected agents generate parallel independent responses.
-3.  **Matrix-Scoring**: Agents cross-evaluate each other. The **Adjacency Variance** is calculated; if consensus is high (variance < 0.15), the system skips refinement to save latency and cost.
-4.  **Iterative Refinement**: If needed, high-scoring responses are refined through a bidirectional loop (max 2 iterations) with convergence detection.
-5.  **Synthesis (Pooling)**: The final response is synthesized by a premium model (`claude-3.5-sonnet`) and streamed via SSE.
+1.  **Node Sampling**: A Meta-LLM selects the most relevant experts based on the query and personalized memory retrieved from the Knowledge Graph.
+2.  **Parallel Generation**: Selected agents generate independent responses.
+3.  **Adversarial Consensus Debate**: High-scoring responses are entered into a multi-turn adversarial loop.
+    - **Critique**: Agents explicitly critique the logical architecture of their peers.
+    - **Stability Engine**: A dedicated utility (`lib/goa/stability.ts`) computes the **Kolmogorov-Smirnov (KS) statistic** and **Shannon Entropy** to detect semantic convergence.
+    - **Adjudication**: A **DeepSeek V4 Flash** Semantic Judge applies a **Pragma-Dialectical** framework to trigger probabilistic early-exits.
+4.  **Synthesis (Pooling)**: The final response is synthesized and streamed, including consensus telemetry.
 
 ## 2. Knowledge Graph (KG) Integration
 
 Every interaction with the engine triggers a background extraction task:
 
 - **Extractor**: `lib/kg/extraction.ts` uses the `Owl Alpha` model to identify "Subject-Predicate-Object" triplets within the conversation transcript.
-- **Persistence**: Triplets are stored in a local SQLite database (`lib/kg/db.ts`) using the `libsql` client.
-- **Visualization**: The front-end renders these triplets as an interactive graph using **React Flow**, allowing users to explore the conceptual map of their intelligence store.
+- **Consolidation Agent**: A background worker (`lib/kg/consolidation.ts`) uses **DeepSeek V3** to prune redundancy and canonicalize entities (e.g., merging "AI" and "Artificial Intelligence") via transactional SQLite updates.
+- **Persistence**: Triplets are stored in a local SQLite database (`lib/kg/db.ts`) using the `libsql` client with ACID batch safety.
+- **Visualization**: The front-end renders these triplets as an interactive graph using **React Flow**.
 
 ## 3. Privacy & Security Layer
 
