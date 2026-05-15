@@ -8,10 +8,31 @@ export interface ChatMessage {
 }
 
 export interface ChatOptions {
-  model: string;
+  model?: string;
+  intent?: "sampling" | "scoring" | "refinement" | "synthesis";
   temperature?: number;
   max_tokens?: number;
   json_mode?: boolean;
+}
+
+const MODEL_TIERS = {
+  CHEAP: "google/gemini-2.0-flash-001", // Very fast and free/cheap
+  MEDIUM: "meta-llama/llama-3.3-70b-instruct:free",
+  PREMIUM: "anthropic/claude-3.5-sonnet", // High quality for synthesis/refinement
+};
+
+export function modelRouter(intent?: string): string {
+  switch (intent) {
+    case "sampling":
+    case "scoring":
+      return MODEL_TIERS.CHEAP;
+    case "refinement":
+      return MODEL_TIERS.MEDIUM;
+    case "synthesis":
+      return MODEL_TIERS.PREMIUM;
+    default:
+      return MODEL_TIERS.CHEAP;
+  }
 }
 
 export async function chat(messages: ChatMessage[], options: ChatOptions) {
@@ -29,7 +50,7 @@ export async function chat(messages: ChatMessage[], options: ChatOptions) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: options.model,
+      model: options.model || modelRouter(options.intent),
       messages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.max_tokens,
@@ -95,7 +116,7 @@ export async function streamChat(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: options.model,
+      model: options.model || modelRouter(options.intent),
       messages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.max_tokens,

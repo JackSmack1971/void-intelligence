@@ -6,11 +6,11 @@ Void Intelligence utilizes a **Graph-of-Agents (GoA)** framework to overcome the
 
 The core reasoning engine (`lib/goa/engine.ts`) follows a strict 5-stage deterministic pipeline:
 
-1.  **Sampling**: Analyze the user query to determine the required expertise and sampling density.
-2.  **Parallel Generation**: Dispatch multiple specialized agents (e.g., `ring-2.6-1t`) to generate diverse perspectives on the problem.
-3.  **Matrix-Scoring**: Use a "Scorer" agent to evaluate all generated responses based on relevance, factual density, and logical consistency.
-4.  **Refinement**: Selected high-scoring responses are combined and refined by a heavy-reasoning model (`qwen3-thinking`).
-5.  **Synthesis (Pooling)**: The final response is synthesized and streamed to the user via Server-Sent Events (SSE).
+1.  **Node Sampling**: A Meta-LLM (`ring-2.6-1t`) selects the most relevant experts based on the query and personalized memory.
+2.  **Initial Generation**: Selected agents generate parallel independent responses.
+3.  **Matrix-Scoring**: Agents cross-evaluate each other. The **Adjacency Variance** is calculated; if consensus is high (variance < 0.15), the system skips refinement to save latency and cost.
+4.  **Iterative Refinement**: If needed, high-scoring responses are refined through a bidirectional loop (max 2 iterations) with convergence detection.
+5.  **Synthesis (Pooling)**: The final response is synthesized by a premium model (`claude-3.5-sonnet`) and streamed via SSE.
 
 ## 2. Knowledge Graph (KG) Integration
 
@@ -30,9 +30,10 @@ To maintain absolute data privacy, a zero-trust guardrail is implemented:
 ## 4. Component Hierarchy
 
 - `app/page.tsx`: Main chat state orchestrator.
-- `lib/goa/`: Logic for multi-agent coordination.
-- `lib/openrouter/`: Resilience layer for API communication (Retry/Backoff).
-- `components/`: Pure UI components (FeatureCards, ChatInput, Sidebar).
+- `lib/goa/`: Logic for multi-agent coordination and iterative refinement.
+- `lib/openrouter/`: Resilience layer and **Tiered Model Router**.
+- `lib/kg/kgCache.ts`: LRU cache for high-speed Knowledge Graph retrieval.
+- `lib/utils/telemetry.ts`: Performance monitoring and consensus metrics.
 - `lib/design-tokens.ts`: The source of truth for the Cyber-Brutalist design system.
 
 ## 5. Resilience Strategy

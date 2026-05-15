@@ -4,32 +4,30 @@ const FORMAT_MEMORY = (memory?: string) =>
   memory ? `\n\n[LOCAL_MEMORY_CONTEXT]\n${memory}\n(Priority: Use these stored facts to personalize your response.)\n` : "";
 
 export const NODE_SAMPLING_PROMPT = (query: string, cards: ModelCard[], k: number, memory?: string) => `
-You are the Meta-LLM orchestrator for the Void Intelligence Graph-of-Agents system.
-Your task is to select the top ${k} agents from the following pool that are most relevant to the user query.
+You are the Meta-LLM orchestrator. Select the top ${k} agents for the user query.
 ${FORMAT_MEMORY(memory)}
-User Query: "${query}"
+Query: "${query}"
 
-Available Agents:
-${cards.map(c => `- [${c.id}] ${c.name}: ${c.description} (Capabilities: ${c.capabilities.join(", ")})`).join("\n")}
+Agents:
+${cards.map(c => `- [${c.id}] ${c.name}: ${c.description}`).join("\n")}
 
-Respond ONLY with a JSON object in this format:
+Respond ONLY with JSON:
 {
   "selected_ids": ["id1", "id2", "id3"],
-  "rationale": "Brief explanation of why these agents were selected."
+  "rationale": "Reason"
 }
 `;
 
 export const RELEVANCE_SCORING_PROMPT = (query: string, peerResponse: string, memory?: string) => `
-Evaluate the following response to the query: "${query}"
+Evaluate the response to: "${query}"
 ${FORMAT_MEMORY(memory)}
-Peer Response:
-"${peerResponse}"
+Response: "${peerResponse}"
 
-Rate the relevance, accuracy, and depth of this response on a scale of 0.0 to 1.0.
-Respond ONLY with a JSON object in this format:
+Rate relevance/accuracy (0.0 - 1.0).
+Respond ONLY with JSON:
 {
   "score": 0.85,
-  "reasoning": "Brief justification for the score."
+  "reasoning": "Justification"
 }
 `;
 

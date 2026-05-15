@@ -39,7 +39,7 @@ As you chat, you will see status messages like:
 - `Scoring and refining logic...`
 - `Synthesizing final intelligence...`
 
-These represent the GoA pipeline stages working in real-time.
+These represent the GoA pipeline stages working in real-time. Note that if the system detects **High Consensus** between initial expert responses, it may skip the refinement stage to deliver your answer faster.
 
 ## 5. Exploring the Knowledge Graph
 

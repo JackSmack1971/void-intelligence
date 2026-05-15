@@ -27,15 +27,20 @@ Orchestrates the multi-agent reasoning graph.
 ```typescript
 interface GoAResult {
   finalResponse: string;
-  reasoningSteps: string[];
-  tripletsExtracted: number;
+  selectedAgents: ModelCard[];
+  matrix: AdjacencyMatrix; // Adjacency matrix of cross-evaluation scores
+  sourceNodes: string[];   // High-centrality agents (primary reasoners)
+  targetNodes: string[];   // Refining agents
 }
 ```
 
 ## OpenRouter Client (`lib/openrouter/client.ts`)
 
-### `chatWithRetry(messages, config)`
-Standard chat completion with exponential backoff for rate limits.
+### `chatWithRetry(messages, options)`
+Standard chat completion with exponential backoff and **Tiered Model Routing**.
+- **Options**:
+    - `intent`: `"sampling" | "scoring" | "refinement" | "synthesis"` (Used to automatically select the optimal model tier).
+    - `model`: (Optional) Manual override for model selection.
 
 ### `streamChat(messages, config, onToken)`
 Low-level SSE streaming implementation.

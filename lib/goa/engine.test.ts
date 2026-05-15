@@ -19,30 +19,29 @@ describe('runGoA engine', () => {
   });
 
   it('should execute all stages of the GoA pipeline', async () => {
-    // Stage 1: Node Sampling
-    (client.chatWithRetry as any).mockResolvedValueOnce(JSON.stringify({ 
-      selected_ids: ['agent-1', 'agent-2', 'agent-3'] 
-    }));
-
-    // Stage 3: Matrix Scoring (6 calls for 3x3 diagonal excluded)
-    (client.chatWithRetry as any)
-      .mockResolvedValue(JSON.stringify({ score: 0.8 }));
-
-    // Note: Since Stage 2, 3, and 4 are parallel/interleaved in implementation,
-    // we should use mockImplementation to return based on the prompt or model if possible,
-    // or just ensure all mocks return valid JSON where expected.
-    
+    let scoreCounter = 0;
     (client.chatWithRetry as any).mockImplementation((messages: any, options: any) => {
       const prompt = messages[0].content;
-      if (prompt.includes('select the top')) {
+      const intent = options.intent;
+
+      // Stage 0: Memory
+      if (prompt.includes('Extract 3-5 core entities')) {
+        return Promise.resolve('keyword1, keyword2');
+      }
+      // Stage 1: Node Sampling
+      if (intent === 'sampling' || prompt.includes('Select the top')) {
         return Promise.resolve(JSON.stringify({ selected_ids: ['agent-1', 'agent-2', 'agent-3'] }));
       }
-      if (prompt.includes('Rate the relevance')) {
-        return Promise.resolve(JSON.stringify({ score: 0.8 }));
+      // Stage 3: Matrix Scoring
+      if (prompt.includes('Evaluate the response to')) {
+        const score = scoreCounter++ % 2;
+        return Promise.resolve(JSON.stringify({ score }));
       }
+      // Stage 5: Pooling (GoA-Max)
       if (prompt.includes('Select the best response')) {
         return Promise.resolve(JSON.stringify({ best_index: 0 }));
       }
+      // Stage 2/4: Generation/Refinement
       return Promise.resolve('Refined/Initial Response');
     });
 

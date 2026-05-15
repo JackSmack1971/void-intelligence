@@ -1,5 +1,6 @@
 import { createClient } from "@libsql/client";
 import { Triplet } from "./extraction";
+import { getCache, setCache } from "./kgCache";
 
 // Initialize SQLite
 const client = createClient({
@@ -32,15 +33,17 @@ export async function initDb() {
 }
 
 /**
- * Store extracted triplets
+ * Store extracted triplets using a single batch transaction.
  */
 export async function storeTriplets(triplets: Triplet[]) {
-  for (const t of triplets) {
-    await client.execute({
-      sql: "INSERT INTO triplets (subject, predicate, object) VALUES (?, ?, ?)",
-      args: [t.subject, t.predicate, t.object],
-    });
-  }
+  if (triplets.length === 0) return;
+  
+  const stmts = triplets.map(t => ({
+    sql: "INSERT INTO triplets (subject, predicate, object) VALUES (?, ?, ?)",
+    args: [t.subject, t.predicate, t.object],
+  }));
+  
+  await client.batch(stmts, "write");
 }
 
 /**
@@ -62,6 +65,10 @@ export async function getAllTriplets(): Promise<Triplet[]> {
 export async function getRelevantMemory(keywords: string[]): Promise<Triplet[]> {
   if (keywords.length === 0) return [];
 
+  const cacheKey = keywords.sort().join(",");
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
   // Build OR conditions for all keywords
   const conditions = keywords.map(() => "subject LIKE ? OR object LIKE ?").join(" OR ");
   const args = keywords.flatMap(k => [`%${k}%`, `%${k}%`]);
@@ -72,22 +79,24 @@ export async function getRelevantMemory(keywords: string[]): Promise<Triplet[]> 
       FROM triplets
       WHERE ${conditions}
     )
-    SELECT subject, predicate, object FROM direct_matches
+    SELECT subject, predicate, object, timestamp FROM direct_matches
     UNION
-    SELECT t.subject, t.predicate, t.object
+    SELECT t.subject, t.predicate, t.object, t.timestamp
     FROM triplets t
     JOIN direct_matches dm ON (t.subject = dm.object OR t.object = dm.subject)
-    ORDER BY t.timestamp DESC
+    ORDER BY timestamp DESC
     LIMIT 15
   `;
 
   const result = await client.execute({ sql: query, args });
-  
-  return result.rows.map(row => ({
+  const triplets = result.rows.map(row => ({
     subject: row.subject as string,
     predicate: row.predicate as string,
     object: row.object as string,
   }));
+
+  setCache(cacheKey, triplets);
+  return triplets;
 }
 
 /**
