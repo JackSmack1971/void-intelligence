@@ -44,4 +44,26 @@ describe('DebateScheduler', () => {
     expect(waves[0]).toContain('A');
     expect(waves[0]).toContain('B');
   });
+
+  it('should support sparse matrices [BEH-1]', () => {
+    const agents = ['A', 'B', 'C'];
+    const matrix = {
+      'A': { 'B': 1 }
+      // C is missing from matrix keys
+    };
+    const waves = DebateScheduler.computeWaves(agents, matrix as any);
+    // A and C should be in wave 0, B in wave 1
+    expect(waves).toHaveLength(2);
+    expect(waves[0]).toContain('A');
+    expect(waves[0]).toContain('C');
+    expect(waves[1]).toEqual(['B']);
+  });
+
+  it('should ensure deterministic wave ordering [BEH-2]', () => {
+    const agents = ['B', 'A', 'C'];
+    const matrix = {};
+    const waves = DebateScheduler.computeWaves(agents, matrix as any);
+    // Should be sorted alphabetically: [A, B, C]
+    expect(waves[0]).toEqual(['A', 'B', 'C']);
+  });
 });

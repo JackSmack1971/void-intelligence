@@ -19,8 +19,9 @@ export class DebateScheduler {
     // In our case, if matrix[source][target] > 0, it means target critiques source.
     // So target depends on source.
     for (const source in matrix) {
+      if (!adj[source]) continue;
       for (const target in matrix[source]) {
-        if (matrix[source][target] > 0) {
+        if (adj[target] && matrix[source][target] > 0) {
           adj[source].push(target);
           inDegree[target]++;
         }
@@ -31,7 +32,7 @@ export class DebateScheduler {
     let queue = agents.filter(id => inDegree[id] === 0);
 
     while (queue.length > 0) {
-      waves.push([...queue]);
+      waves.push([...queue].sort());
       const nextQueue: string[] = [];
 
       for (const node of queue) {
@@ -49,7 +50,8 @@ export class DebateScheduler {
     const processed = new Set(waves.flat());
     const leftovers = agents.filter(id => !processed.has(id));
     if (leftovers.length > 0) {
-      waves.push(leftovers);
+      console.warn(`[DebateScheduler] Cycle detected or disconnected components found. Processing leftovers: ${leftovers.join(", ")}`);
+      waves.push(leftovers.sort());
     }
 
     return waves;
