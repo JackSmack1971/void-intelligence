@@ -1,6 +1,6 @@
 import { getRelevantMemory as getSqliteMemory } from "./db";
 import { VectorStore } from "./chroma";
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 
 /**
  * Hybrid Retriever: Combines SQLite (Keyword/BM25) and Chroma (Semantic) search.

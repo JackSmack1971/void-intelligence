@@ -1,4 +1,4 @@
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 import { encryptData, decryptData } from "../utils/crypto";
 
 export interface TrailPayload {

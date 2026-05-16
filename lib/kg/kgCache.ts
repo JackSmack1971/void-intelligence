@@ -1,5 +1,5 @@
 import { LRUCache } from "lru-cache";
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 
 /**
  * Cache for Knowledge Graph triplets to reduce database I/O.

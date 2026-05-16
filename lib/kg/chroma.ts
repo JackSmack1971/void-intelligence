@@ -1,5 +1,5 @@
 import { ChromaClient } from "chromadb";
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 
 const client = new ChromaClient({ path: "http://localhost:8000" });
 

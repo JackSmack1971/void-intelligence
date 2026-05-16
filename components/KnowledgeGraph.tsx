@@ -14,7 +14,7 @@ import ReactFlow, {
   useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Triplet } from '@/lib/kg/extraction';
+import { KnowledgeTriplet as Triplet } from '@/lib/goa/types';
 import { getPredicateColor } from '@/lib/utils/colors';
 import { toast } from 'sonner';
 import { Trash2, Filter, Search, RotateCcw, X } from 'lucide-react';

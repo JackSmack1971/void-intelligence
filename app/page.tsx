@@ -20,7 +20,7 @@ interface Message {
   debateLog?: any[];
   showDebate?: boolean;
   selectedAgents?: any[];
-  adjacencyMatrix?: any;
+  matrix?: any;
   complexity?: string;
 }
 
@@ -122,7 +122,7 @@ export default function Home() {
           metrics: result.data.metrics,
           debateLog: result.data.debateLog,
           selectedAgents: result.data.selectedAgents,
-          adjacencyMatrix: result.data.adjacencyMatrix,
+          matrix: result.data.matrix,
           complexity: result.data.complexity,
           showDebate: false
         };
@@ -160,7 +160,7 @@ export default function Home() {
 
   const handleIntervene = async (msgIdx: number, modelId: string, type: 'critique' | 'redirect') => {
     const msg = messages[msgIdx];
-    if (!msg.debateLog || !msg.selectedAgents || !msg.adjacencyMatrix) return;
+    if (!msg.debateLog || !msg.selectedAgents || !msg.matrix) return;
 
     let interventionText = "";
     if (type === 'critique') {
@@ -186,7 +186,7 @@ export default function Home() {
         messages[msgIdx - 1].content, // original query
         [...msg.debateLog, newEntry],
         msg.selectedAgents,
-        msg.adjacencyMatrix
+        msg.matrix
       );
 
       if (result.success && result.data) {
@@ -196,7 +196,7 @@ export default function Home() {
           metrics: result.data.metrics,
           debateLog: result.data.debateLog,
           selectedAgents: result.data.selectedAgents,
-          adjacencyMatrix: result.data.adjacencyMatrix,
+          matrix: result.data.matrix,
           complexity: result.data.complexity,
           showDebate: true
         };

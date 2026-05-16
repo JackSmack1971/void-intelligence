@@ -1,4 +1,4 @@
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 
 const DB_NAME = "void_intelligence_local";
 const STORE_NAME = "triplets";

@@ -1,5 +1,5 @@
 import { createClient } from "@libsql/client";
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 import { getCache, setCache } from "./kgCache";
 
 // Initialize SQLite

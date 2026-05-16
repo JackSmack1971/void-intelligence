@@ -1,6 +1,6 @@
 import { initDb, storeTriplets, getRelevantMemory, storeMessage, getAllTriplets } from "./db";
 import { extractionQueue } from "./queue";
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 import { getHybridMemory } from "./hybridRetriever";
 
 export class KnowledgeGraph {
