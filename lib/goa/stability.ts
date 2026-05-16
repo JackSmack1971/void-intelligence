@@ -1,14 +1,4 @@
-/**
- * Stability Engine for Void Intelligence GoA
- * Implements Kolmogorov-Smirnov (KS) test and Entropy Reduction monitoring
- * for debate convergence detection.
- */
-
-export interface StabilityMetrics {
-  ksStatistic: number;
-  entropyReduction: number;
-  isStable: boolean;
-}
+import { StabilityMetrics } from "./types";
 
 /**
  * Normalizes an array of numbers to sum to 1.0, creating a probability distribution.

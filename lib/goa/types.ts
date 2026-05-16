@@ -28,11 +28,20 @@ export interface AdjacencyMatrix {
   };
 }
 
-export interface ConvergenceMetrics {
+export interface StabilityMetrics {
   ksStatistic: number;
   entropyReduction: number;
-  iterations: number;
   isStable: boolean;
+}
+
+export interface ConvergenceMetrics extends StabilityMetrics {
+  iterations: number;
+}
+
+export interface KnowledgeTriplet {
+  subject: string;
+  predicate: string;
+  object: string;
 }
 
 export interface GoAResult {
@@ -44,7 +53,6 @@ export interface GoAResult {
   metrics?: ConvergenceMetrics;
   debateLog?: { turn: number; model: string; content: string }[];
   harmonyScore?: number;
-  extractedTriplets?: any[];
-  complexity?: string;
-  adjacencyMatrix?: AdjacencyMatrix;
+  extractedTriplets?: KnowledgeTriplet[];
+  complexity?: "low" | "medium" | "high";
 }

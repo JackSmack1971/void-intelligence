@@ -25,14 +25,14 @@ describe('GoAOrchestrator', () => {
       const prompt = messages[0].content;
       const intent = options.intent;
 
-      if (prompt.includes('Classify the complexity')) return Promise.resolve(JSON.stringify({ complexity: 'medium' }));
+      if (prompt.includes('Strategy Judge')) return Promise.resolve(JSON.stringify({ complexity: 'medium' }));
       if (prompt.includes('Extract 3-5 core entities')) return Promise.resolve('keyword1');
       if (intent === 'sampling') return Promise.resolve(JSON.stringify({ 
         required_skill_paths: ['Logic/Formal'],
         selected_ids: ['agent-1', 'agent-2', 'agent-3'] 
       }));
-      if (intent === 'scoring' && prompt.includes('Evaluate the response')) {
-        return Promise.resolve(JSON.stringify({ score: (scoreCounter++ % 2) }));
+      if (intent === 'scoring' && prompt.includes('Precision Evaluator')) {
+        return Promise.resolve(JSON.stringify({ score: (scoreCounter++ % 2) / 10 + 0.5 })); // Use fractional scores
       }
       if (intent === 'scoring' && prompt.includes('Adjudicating Semantic Judge')) {
         return Promise.resolve(JSON.stringify({
@@ -64,7 +64,7 @@ describe('GoAOrchestrator', () => {
   it('should increase k for high complexity queries [BEH-1]', async () => {
     (mockLlm.chat as any).mockImplementation((messages: any, options: any) => {
       const prompt = messages[0].content;
-      if (prompt.includes('Classify the complexity')) return Promise.resolve(JSON.stringify({ complexity: 'high' }));
+      if (prompt.includes('Strategy Judge')) return Promise.resolve(JSON.stringify({ complexity: 'high' }));
       if (options.intent === 'sampling') {
         // Extract k from prompt if possible, or just return based on what we expect
         return Promise.resolve(JSON.stringify({ selected_ids: ['agent-1', 'agent-2', 'agent-3', 'agent-4'] }));
@@ -83,7 +83,7 @@ describe('GoAOrchestrator', () => {
   it('should decrease k for low complexity queries [BEH-2]', async () => {
     (mockLlm.chat as any).mockImplementation((messages: any, options: any) => {
       const prompt = messages[0].content;
-      if (prompt.includes('Classify the complexity')) return Promise.resolve(JSON.stringify({ complexity: 'low' }));
+      if (prompt.includes('Strategy Judge')) return Promise.resolve(JSON.stringify({ complexity: 'low' }));
       if (options.intent === 'sampling') {
         return Promise.resolve(JSON.stringify({ selected_ids: ['agent-1', 'agent-2'] }));
       }

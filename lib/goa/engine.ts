@@ -304,8 +304,7 @@ export class GoAOrchestrator {
       metrics,
       debateLog,
       harmonyScore,
-      complexity: options.complexity,
-      adjacencyMatrix: matrix
+      complexity: options.complexity as "low" | "medium" | "high"
     };
   }
 }
