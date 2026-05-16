@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import ReactFlow, { 
   Background, 
   Node, 
@@ -19,18 +19,33 @@ interface DebateEntry {
 
 interface Props {
   debateLog: DebateEntry[];
+  onIntervene?: (modelId: string, type: 'critique' | 'redirect') => void;
 }
 
-function DebateGraphInner({ debateLog }: Props) {
+function DebateGraphInner({ debateLog, onIntervene }: Props) {
+  const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
+
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      setMenu({
+        id: node.id,
+        top: event.clientY,
+        left: event.clientX,
+      });
+    },
+    [setMenu]
+  );
+
+  const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
+
   const { nodes, edges } = useMemo(() => {
     const nodesList: Node[] = [];
     const edgesList: Edge[] = [];
     
-    // Group entries by turn
     const turns = Array.from(new Set(debateLog.map(e => e.turn))).sort((a, b) => a - b);
     const models = Array.from(new Set(debateLog.map(e => e.model)));
     
-    // Create Agent Nodes (Top Row)
     models.forEach((model, i) => {
       nodesList.push({
         id: model,
@@ -47,70 +62,109 @@ function DebateGraphInner({ debateLog }: Props) {
           fontWeight: 'bold',
           textAlign: 'center',
           boxShadow: '0 0 15px rgba(59, 130, 246, 0.2)',
+          cursor: 'context-menu'
         },
       });
     });
 
-    // Create Turn Nodes and Critique Edges
     debateLog.forEach((entry, i) => {
       const turnY = entry.turn * 150;
       const modelIdx = models.indexOf(entry.model);
-      
       const nodeId = `turn-${entry.turn}-${entry.model}-${i}`;
-      
-      // Determine if it's a critique
       const isCritique = entry.content.includes('Critique of');
+      const isIntervention = entry.content.includes('[INTERVENTION]');
       
       nodesList.push({
         id: nodeId,
         data: { 
-          label: isCritique 
+          label: isIntervention
+            ? `USER INTERVENTION`
+            : isCritique 
             ? `Turn ${entry.turn}: Critique` 
             : `Turn ${entry.turn}: Refinement` 
         },
         position: { x: modelIdx * 200, y: turnY },
         style: {
-          background: isCritique ? 'rgba(153, 27, 27, 0.2)' : 'rgba(21, 128, 61, 0.2)',
-          color: isCritique ? '#f87171' : '#4ade80',
-          border: `1px solid ${isCritique ? '#ef4444' : '#22c55e'}`,
+          background: isIntervention ? 'rgba(147, 51, 234, 0.2)' : isCritique ? 'rgba(153, 27, 27, 0.2)' : 'rgba(21, 128, 61, 0.2)',
+          color: isIntervention ? '#c084fc' : isCritique ? '#f87171' : '#4ade80',
+          border: `1px solid ${isIntervention ? '#9333ea' : isCritique ? '#ef4444' : '#22c55e'}`,
           borderRadius: '4px',
           padding: '6px',
           width: 150,
           fontSize: '9px',
           textAlign: 'center',
+          boxShadow: isIntervention ? '0 0 10px rgba(147, 51, 234, 0.3)' : 'none'
         },
       });
 
-      // Edge from Agent to first turn, or previous turn to current
-      const sourceId = entry.turn === 1 ? entry.model : `turn-${entry.turn-1}-${entry.model}`;
-      // Note: This logic is simplified for visualization.
-      
       edgesList.push({
         id: `e-${nodeId}`,
         source: entry.model,
         target: nodeId,
         animated: true,
-        style: { stroke: '#475569' },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#475569' },
+        style: { stroke: isIntervention ? '#9333ea' : '#475569' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isIntervention ? '#9333ea' : '#475569' },
       });
     });
 
     return { nodes: nodesList, edges: edgesList };
   }, [debateLog]);
 
+  const onNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      // For mobile: treat click as context menu if it's an agent node
+      if (node.id && !node.id.startsWith('turn-')) {
+        setMenu({
+          id: node.id,
+          top: event.clientY,
+          left: event.clientX,
+        });
+      }
+    },
+    [setMenu]
+  );
+
   return (
-    <div className="w-full h-[400px] bg-gray-950 border border-gray-800 rounded-lg overflow-hidden mt-4">
+    <div className="w-full h-[450px] bg-gray-950 border border-gray-800 rounded-lg overflow-hidden mt-4 relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodeContextMenu={onNodeContextMenu}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         fitView
         className="bg-slate-950"
       >
         <Background color="#1e293b" gap={20} />
         <Panel position="top-left" className="bg-gray-900/80 p-2 rounded border border-gray-700 text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-          Adversarial Exchange Trail
+          Strategic Interception Interface
+        </Panel>
+        <Panel position="bottom-right" className="p-2 text-[9px] text-gray-600 font-mono">
+          [CLICK/LONG-PRESS AGENT TO INTERVENE]
         </Panel>
       </ReactFlow>
+
+      {menu && (
+        <div 
+          className="fixed z-[1000] bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 w-48 animate-in fade-in zoom-in duration-150"
+          style={{ top: menu.top, left: menu.left }}
+        >
+          <button 
+            onClick={() => { onIntervene?.(menu.id, 'critique'); setMenu(null); }}
+            className="w-full text-left px-4 py-2 text-xs text-white hover:bg-purple-600 transition-colors flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-purple-500" />
+            Add Manual Critique
+          </button>
+          <button 
+            onClick={() => { onIntervene?.(menu.id, 'redirect'); setMenu(null); }}
+            className="w-full text-left px-4 py-2 text-xs text-white/70 hover:bg-blue-600/50 transition-colors flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            Redirect Agent
+          </button>
+        </div>
+      )}
     </div>
   );
 }

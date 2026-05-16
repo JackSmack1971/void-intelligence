@@ -50,3 +50,15 @@ Click the **Knowledge Graph** link in the sidebar. This dashboard visualizes the
 
 ## 6. Privacy Redaction
 You can verify redaction by typing PII (like a test email `test@example.com`) in the chat. The system will mask it locally before the API call and restore it when displaying the response.
+
+## 7. Common Setup Issues
+
+- **Missing API Key**: If you receive a `401 Unauthorized` error, ensure your `OPENROUTER_API_KEY` is correctly set in `.env.local` and that the server has been restarted.
+- **Rate Limiting (429)**: The free-tier models have low rate limits. If the engine pauses, it is likely waiting for the exponential backoff to clear.
+- **Database Locked**: If you encounter `SQLITE_BUSY`, ensure no other process is holding a lock on `void-intelligence.db`.
+
+## 8. Next Steps
+
+- **[Architecture](./ARCHITECTURE.md)**: Deep dive into the GoA engine logic.
+- **[Development](./DEVELOPMENT.md)**: Learn how to add new expert models or skills.
+- **[Testing](./TESTING.md)**: Run the verification suite to ensure everything is working.

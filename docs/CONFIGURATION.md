@@ -45,3 +45,23 @@ Stores chat history for context preservation.
 The OpenRouter free tier is limited to **20 requests per minute**. The system implements:
 - **Sequential Delay**: Non-parallel tasks are throttled.
 - **Retry Logic**: 429 errors trigger a 1s -> 2s -> 4s exponential backoff.
+
+## Local Configuration Files
+
+Beyond environment variables, the system uses JSON files in the `config/` directory for engine-level settings:
+
+### 1. `config/models.json`
+Defines the available LLM models and their roles within the GoA system.
+- `id`: The OpenRouter model string.
+- `role`: One of `meta`, `logic`, `extraction`, `general`, or `fast`.
+- `skills`: A list of hierarchical skills from the taxonomy that the model excels at.
+
+### 2. `config/taxonomy.json`
+Defines the hierarchical skill tree used for model selection and complexity analysis. 
+- Format: `Category > Sub-category > Specific Skill`.
+
+## Per-Environment Overrides
+
+- **Development**: Use `.env.local` for local keys and settings.
+- **Production**: Set environment variables in your deployment platform (e.g., Vercel, Docker).
+- **Testing**: The system uses `.env.test` if present, otherwise defaults to standard environment variables with mock database paths.

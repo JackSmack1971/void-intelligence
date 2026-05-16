@@ -3,6 +3,23 @@ import { ModelCard } from "./types";
 const FORMAT_MEMORY = (memory?: string) => 
   memory ? `\n\n[LOCAL_MEMORY_CONTEXT]\n${memory}\n(Priority: Use these stored facts to personalize your response.)\n` : "";
 
+export const COMPLEXITY_CLASSIFICATION_PROMPT = (query: string) => `
+You are a Strategy Judge. Classify the complexity of the user query to determine the required expert density.
+
+Categories:
+- "low": Simple factual recall, single-step extraction, or casual greeting.
+- "medium": Multi-hop reasoning, creative synthesis, or open-ended analysis.
+- "high": Formal logic, mathematical derivation, contradictory domains, or adversarial constraints.
+
+Query: "${query}"
+
+Respond ONLY with JSON:
+{
+  "complexity": "low" | "medium" | "high",
+  "rationale": "Short reason"
+}
+`;
+
 export const NODE_SAMPLING_PROMPT = (query: string, cards: ModelCard[], k: number, memory?: string) => `
 You are the Meta-LLM orchestrator. Perform Taxonomy-Aware Sampling to select the top ${k} agents for the user query.
 
@@ -36,18 +53,37 @@ Respond ONLY with JSON:
 }
 `;
 
-export const REFINEMENT_PROMPT = (query: string, currentResponse: string, contexts: string[], memory?: string) => `
+export const REFINEMENT_PROMPT = (query: string, currentResponse: string, critiques: string[], peerPerspectives: string[], memory?: string) => `
 User Query: "${query}"
 ${FORMAT_MEMORY(memory)}
+
 Your Initial Response:
 "${currentResponse}"
 
-Context from Peer Experts:
-${contexts.map((c, i) => `Expert ${i + 1}: "${c}"`).join("\n\n")}
+Global Expert Context (Other Perspectives):
+${peerPerspectives.map((p, i) => `Perspective ${i + 1}: "${p}"`).join("\n\n")}
 
-Refine your response by incorporating the superior reasoning or missing details from the peer experts. 
-Fix any logical errors or gaps. Maintain your persona but elevate the quality.
+Critiques Directed at You:
+${critiques.map((c, i) => `Critique ${i + 1}: "${c}"`).join("\n\n")}
+
+Refine your response by:
+1. Incorporating superior reasoning or missing details from the global expert context.
+2. Addressing the specific critiques directed at your initial response.
+3. Fix any logical errors or gaps. Maintain your persona but elevate the quality.
+
 Output your final refined response.
+`;
+
+export const SUMMARIZATION_PROMPT = (query: string, debateLog: string) => `
+Summarize the following adversarial debate log into a concise, bulleted "Consensus State".
+Focus on resolved points, remaining contradictions, and key expert pivots.
+
+User Query: "${query}"
+
+Debate Log:
+${debateLog}
+
+Summary:
 `;
 
 export const POOLING_SYNTHESIS_PROMPT = (query: string, responses: string[], memory?: string) => `

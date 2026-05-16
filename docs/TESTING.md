@@ -44,3 +44,33 @@ For UI polish and responsiveness:
 - Verify mobile responsiveness on breakpoints (< 768px).
 - Verify dark mode contrast and readability.
 - Verify "Reasoning Log" timing and animations.
+
+## 5. Writing New Tests
+
+- **Unit Tests**: Create a file named `*.test.ts` adjacent to the file being tested. Use Vitest `describe` and `it` blocks.
+- **Mocking**: Use `vi.mock()` to mock external dependencies like the `LLMProvider` or `KnowledgeGraph`.
+- **E2E Tests**: Add new specs to the `tests/` directory. Use the Page Object model for complex interactions.
+
+## 6. Coverage Requirements
+
+We aim for high coverage in core engine logic:
+| Area | Target Coverage |
+| :--- | :--- |
+| `lib/goa/` | 90%+ |
+| `lib/kg/` | 85%+ |
+| `lib/utils/` | 95%+ |
+
+Run coverage report with:
+```bash
+npm run test:coverage
+```
+
+## 7. CI Integration
+
+Testing is automated via **GitHub Actions**:
+- **Workflow**: `.github/workflows/test.yml`
+- **Trigger**: Every push to `main` and all Pull Requests.
+- **Steps**:
+  1. Linting (`npm run lint`)
+  2. Unit Tests (`npm run test`)
+  3. Build (`npm run build`)

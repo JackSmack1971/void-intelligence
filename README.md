@@ -55,6 +55,29 @@ Detailed documentation is available in the `docs/` directory:
 - [Testing](./docs/TESTING.md): Test suite overview and verification.
 - [API Reference](./docs/API.md): Engine interfaces and Server Actions.
 
+## 💡 Usage Examples
+
+### Running a Reasoning Cycle
+You can trigger a GoA reasoning cycle directly from the UI or by invoking the orchestrator in your code:
+
+```typescript
+import { GoAOrchestrator } from './lib/goa/engine';
+import { ModelCard } from './lib/goa/types';
+
+const orchestrator = new GoAOrchestrator();
+const result = await orchestrator.run("How do I implement AES-GCM in Node.js?", modelCards);
+
+console.log(result.finalResponse);
+console.log(`Harmony Score: ${result.harmonyScore}`);
+```
+
+### Knowledge Graph Exploration
+The engine automatically extracts entities and relationships. You can view the generated graph in the **Strategic Command Dashboard**.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see the documentation in `docs/DEVELOPMENT.md` for local setup and coding standards.
+
 ## ⚖️ License
 
 Private / Local Use Only.

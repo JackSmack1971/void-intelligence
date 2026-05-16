@@ -3,7 +3,15 @@
 import { useState, useRef, useEffect } from "react";
 import { MessageSquare, Sparkles, Code, BarChart3, Bot, ChevronRight, Activity, Eye, EyeOff } from "lucide-react";
 import DebateGraph from "@/components/DebateGraph";
-import { processChat } from "./actions";
+import StrategyDashboard from "@/components/StrategyDashboard";
+import { processChat, processIntervention, syncKg, getTripletsForExport, importSelectedTriplets } from "./actions";
+import ChatInput from "@/components/ChatInput";
+import { FeatureCard } from "@/components/FeatureCard";
+import { Sidebar } from "@/components/Sidebar";
+import { useSharedWorker } from "@/hooks/useSharedWorker";
+import { LocalPersistence } from "@/lib/kg/idb";
+import { SyncService } from "@/lib/kg/sync";
+import MergePreview from "@/components/MergePreview";
 
 interface Message {
   role: "user" | "assistant";
@@ -11,6 +19,9 @@ interface Message {
   metrics?: any;
   debateLog?: any[];
   showDebate?: boolean;
+  selectedAgents?: any[];
+  adjacencyMatrix?: any;
+  complexity?: string;
 }
 
 export default function Home() {
@@ -20,6 +31,64 @@ export default function Home() {
   const [isExtracting, setIsExtracting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const extractionTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [mergeData, setMergeData] = useState<{ newItems: any[], overlaps: any[] } | null>(null);
+
+  const handleExport = async () => {
+    const pass = prompt("Enter passphrase to encrypt the intelligence trail:");
+    if (!pass) return;
+
+    const res = await getTripletsForExport();
+    if (res.success && res.data) {
+      const encrypted = await SyncService.exportTrail(res.data, pass);
+      const blob = new Blob([encrypted], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `trail-${Date.now()}.void`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleImport = async () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".void";
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const pass = prompt("Enter passphrase to decrypt the intelligence trail:");
+      if (!pass) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const encrypted = event.target?.result as string;
+          const payload = await SyncService.decryptTrail(encrypted, pass);
+          
+          const existingRes = await syncKg();
+          if (existingRes.success) {
+            const { newItems, overlaps } = await SyncService.diffTriplets(payload.triplets, existingRes.data || []);
+            setMergeData({ newItems, overlaps });
+          }
+        } catch (err) {
+          alert("Decryption failed. Incorrect passphrase or corrupted file.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  const confirmMerge = async (selected: any[]) => {
+    const res = await importSelectedTriplets(selected);
+    if (res.success) {
+      setMergeData(null);
+      notifyUpdate();
+      alert(`Successfully merged ${selected.length} new relations.`);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,6 +97,12 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, currentStatus]);
+
+  const { notifyUpdate } = useSharedWorker((data) => {
+    if (data.type === "REFRESH_REQUIRED") {
+      console.log("[Sync] Intelligence Harmony: Refreshing cross-tab state...");
+    }
+  });
 
   const handleSend = async (query: string) => {
     if (!query.trim()) return;
@@ -46,16 +121,26 @@ export default function Home() {
           content: result.data.finalResponse,
           metrics: result.data.metrics,
           debateLog: result.data.debateLog,
+          selectedAgents: result.data.selectedAgents,
+          adjacencyMatrix: result.data.adjacencyMatrix,
+          complexity: result.data.complexity,
           showDebate: false
         };
         setMessages(prev => [...prev, assistantMessage]);
         
-        // Trigger extraction status (matches 5s server debounce)
+        // Notify other tabs and persist locally
+        notifyUpdate();
+        syncKg().then(res => {
+          if (res.success && res.data) {
+            LocalPersistence.getInstance().saveTriplets(res.data);
+          }
+        });
+        
         setIsExtracting(true);
         if (extractionTimerRef.current) clearTimeout(extractionTimerRef.current);
         extractionTimerRef.current = setTimeout(() => {
           setIsExtracting(false);
-        }, 6000); // 5s + 1s buffer
+        }, 6000);
       } else {
         setMessages(prev => [...prev, { 
           role: "assistant", 
@@ -73,9 +158,67 @@ export default function Home() {
     }
   };
 
+  const handleIntervene = async (msgIdx: number, modelId: string, type: 'critique' | 'redirect') => {
+    const msg = messages[msgIdx];
+    if (!msg.debateLog || !msg.selectedAgents || !msg.adjacencyMatrix) return;
+
+    let interventionText = "";
+    if (type === 'critique') {
+      interventionText = window.prompt(`Enter manual critique for ${modelId}:`) || "";
+      if (!interventionText) return;
+    } else {
+      alert("Redirecting to heavy-tier model for next round...");
+      interventionText = "[REDIRECT] Escalate to judge tier.";
+    }
+
+    const lastTurn = Math.max(...msg.debateLog.map(l => l.turn));
+    const newEntry = { 
+      turn: lastTurn + 1, 
+      model: modelId, 
+      content: `[USER INTERVENTION]: ${interventionText}` 
+    };
+
+    setIsLoading(true);
+    setCurrentStatus(`Injecting intervention into ${modelId}...`);
+
+    try {
+      const result = await processIntervention(
+        messages[msgIdx - 1].content, // original query
+        [...msg.debateLog, newEntry],
+        msg.selectedAgents,
+        msg.adjacencyMatrix
+      );
+
+      if (result.success && result.data) {
+        const assistantMessage: Message = { 
+          role: "assistant", 
+          content: result.data.finalResponse,
+          metrics: result.data.metrics,
+          debateLog: result.data.debateLog,
+          selectedAgents: result.data.selectedAgents,
+          adjacencyMatrix: result.data.adjacencyMatrix,
+          complexity: result.data.complexity,
+          showDebate: true
+        };
+        setMessages(prev => {
+          const next = [...prev];
+          next[msgIdx] = assistantMessage;
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error("Intervention failed", error);
+    } finally {
+      setIsLoading(false);
+      setCurrentStatus("");
+    }
+  };
+
   return (
-    <main className="flex-1 flex flex-col h-screen overflow-hidden bg-gray-950 relative">
-      {/* Background Glow */}
+    <div className="flex min-h-screen bg-gray-950">
+      <Sidebar onExport={handleExport} onImport={handleImport} />
+      
+      <main className="flex-1 flex flex-col h-screen overflow-hidden relative md:ml-[260px]">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full"></div>
@@ -84,7 +227,7 @@ export default function Home() {
       <div className="flex-1 overflow-y-auto px-4 py-8 space-y-6 scrollbar-hide">
         {messages.length === 0 ? (
           <div className="max-w-3xl mx-auto mt-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <h1 className="text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] via-[#6D28D9] to-[#DB2777]">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-transparent bg-clip-text bg-gradient-to-r from-[#2563EB] via-[#6D28D9] to-[#DB2777]">
               Void Intelligence
             </h1>
             <p className="text-gray-400 text-lg mb-12">
@@ -134,41 +277,55 @@ export default function Home() {
                 `}>
                   {msg.content}
                   
-                  {msg.role === "assistant" && (msg as any).metrics && (
-                    <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-medium">
-                      <div className="flex items-center space-x-4">
-                        <span className="flex items-center">
-                          <BarChart3 className="w-3 h-3 mr-1 text-blue-400" />
-                          Stability: {((1 - (msg as any).metrics.ksStatistic) * 100).toFixed(0)}%
-                        </span>
-                        <span className="flex items-center">
-                          <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
-                          Entropy: -{((msg as any).metrics.entropyReduction) * 100}%
-                        </span>
-                        <span className="flex items-center">
-                          <ChevronRight className="w-3 h-3 mr-1 text-pink-400" />
-                          Turns: {msg.metrics.iterations}
-                        </span>
+                  {msg.role === "assistant" && msg.metrics && (
+                    <>
+                      <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-medium">
+                        <div className="flex items-center space-x-4">
+                          <span className="flex items-center">
+                            <BarChart3 className="w-3 h-3 mr-1 text-blue-400" />
+                            Stability: {((1 - msg.metrics.ksStatistic) * 100).toFixed(0)}%
+                          </span>
+                          <span className="flex items-center">
+                            <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
+                            Harmony: {((msg.metrics.harmonyScore || 0) * 100).toFixed(0)}%
+                          </span>
+                          <span className="flex items-center">
+                            <ChevronRight className="w-3 h-3 mr-1 text-pink-400" />
+                            Turns: {msg.metrics.iterations}
+                          </span>
+                        </div>
+                        
+                        <button 
+                          onClick={() => {
+                            const newMessages = [...messages];
+                            newMessages[i].showDebate = !newMessages[i].showDebate;
+                            setMessages(newMessages);
+                          }}
+                          className="flex items-center gap-1 hover:text-purple-400 transition-colors"
+                        >
+                          {msg.showDebate ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          {msg.showDebate ? "Hide Strategic Console" : "Open Strategic Console"}
+                        </button>
                       </div>
-                      
-                      <button 
-                        onClick={() => {
-                          const newMessages = [...messages];
-                          newMessages[i].showDebate = !newMessages[i].showDebate;
-                          setMessages(newMessages);
-                        }}
-                        className="flex items-center gap-1 hover:text-purple-400 transition-colors"
-                      >
-                        {msg.showDebate ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                        {msg.showDebate ? "Hide Debate" : "View Debate"}
-                      </button>
-                    </div>
-                  )}
 
-                  {msg.role === "assistant" && msg.showDebate && msg.debateLog && (
-                    <DebateGraph debateLog={msg.debateLog} />
+                      {msg.showDebate && (
+                        <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-500">
+                          <StrategyDashboard 
+                            complexity={msg.complexity}
+                            harmonyScore={msg.metrics.harmonyScore}
+                            iterations={msg.metrics.iterations}
+                            k={msg.selectedAgents?.length}
+                          />
+                          {msg.debateLog && (
+                            <DebateGraph 
+                              debateLog={msg.debateLog} 
+                              onIntervene={(modelId, type) => handleIntervene(i, modelId, type)}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
-
                 </div>
               </div>
             ))}
@@ -208,10 +365,20 @@ export default function Home() {
             )}
             <ChatInput onSend={handleSend} disabled={isLoading} />
           <p className="text-[10px] text-center text-gray-600 mt-2 uppercase tracking-widest font-medium">
-            GoA v1.0 • Privacy Redaction Active • Powered by OpenRouter
+            GoA v1.4 • Strategic Interception Active • Encrypted Trails Ready
           </p>
         </div>
       </div>
-    </main>
+      </main>
+
+      {mergeData && (
+        <MergePreview 
+          newItems={mergeData.newItems}
+          overlaps={mergeData.overlaps}
+          onConfirm={confirmMerge}
+          onCancel={() => setMergeData(null)}
+        />
+      )}
+    </div>
   );
 }

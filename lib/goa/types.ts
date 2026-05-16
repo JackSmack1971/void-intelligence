@@ -19,6 +19,7 @@ export interface GoAContext {
   tau: number;
   pooling: "max" | "mean";
   threadId?: string;
+  complexity?: "low" | "medium" | "high";
 }
 
 export interface AdjacencyMatrix {
@@ -42,4 +43,8 @@ export interface GoAResult {
   targetNodes: string[];
   metrics?: ConvergenceMetrics;
   debateLog?: { turn: number; model: string; content: string }[];
+  harmonyScore?: number;
+  extractedTriplets?: any[];
+  complexity?: string;
+  adjacencyMatrix?: AdjacencyMatrix;
 }

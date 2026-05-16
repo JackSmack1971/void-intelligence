@@ -22,6 +22,7 @@ describe('GoAOrchestrator', () => {
       const prompt = messages[0].content;
       const intent = options.intent;
 
+      if (prompt.includes('Classify the complexity')) return Promise.resolve(JSON.stringify({ complexity: 'medium' }));
       if (prompt.includes('Extract 3-5 core entities')) return Promise.resolve('keyword1');
       if (intent === 'sampling') return Promise.resolve(JSON.stringify({ 
         required_skill_paths: ['Logic/Formal'],
@@ -38,6 +39,9 @@ describe('GoAOrchestrator', () => {
           isStable: true,
           rationale: "Consensus reached."
         }));
+      }
+      if (intent === 'synthesis' && prompt.includes('Summarize the following')) {
+        return Promise.resolve('Summarized Debate Context');
       }
       if (intent === 'synthesis') return Promise.resolve('Final Synthesis Response');
       return Promise.resolve('Standard Response');

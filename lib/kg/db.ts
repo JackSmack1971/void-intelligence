@@ -32,8 +32,10 @@ export async function initDb() {
   `);
 }
 
+import { VectorStore } from "./chroma";
+
 /**
- * Store extracted triplets using a single batch transaction.
+ * Store extracted triplets using a single batch transaction and sync to Chroma.
  */
 export async function storeTriplets(triplets: Triplet[]) {
   if (triplets.length === 0) return;
@@ -44,6 +46,9 @@ export async function storeTriplets(triplets: Triplet[]) {
   }));
   
   await client.batch(stmts, "write");
+
+  // Sync to Chroma in background
+  VectorStore.getInstance().then(v => v.upsertTriplets(triplets)).catch(e => console.warn("[Chroma] Sync failed", e));
 }
 
 /**
@@ -132,6 +137,10 @@ export async function consolidateTriplets(oldIds: number[], newTriplets: Triplet
   }));
 
   await client.batch([...deleteStmts, ...insertStmts], "write");
+
+  // Note: For simplicity in this phase, we just upsert the new ones. 
+  // In a production scenario, we should also track IDs to delete in Chroma.
+  VectorStore.getInstance().then(v => v.upsertTriplets(newTriplets)).catch(e => console.warn("[Chroma] Consolidation sync failed", e));
 }
 
 /**
@@ -142,6 +151,7 @@ export async function deleteTriplet(subject: string, predicate: string, object: 
     sql: "DELETE FROM triplets WHERE subject = ? AND predicate = ? AND object = ?",
     args: [subject, predicate, object],
   });
+  // Optional: Sync delete to Chroma here if needed
 }
 
 /**

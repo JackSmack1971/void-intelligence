@@ -45,3 +45,32 @@ The system is designed for high reliability:
 - **Exponential Backoff**: `chatWithRetry` handles 429 (Rate Limit) errors from OpenRouter free-tier.
 - **Error Boundaries**: React Error Boundaries catch rendering failures and provide a graceful recovery UI.
 - **Validation**: Zod is used to validate API responses and configuration schemas.
+
+## 6. Component Diagram
+
+```mermaid
+graph TD
+    User([User]) --> UI[Next.js UI / React Flow]
+    UI --> Actions[Server Actions]
+    Actions --> GoA[GoA Orchestrator]
+    GoA --> LLM[LLM Provider / OpenRouter]
+    GoA --> KG[Knowledge Graph Service]
+    KG --> DB[(SQLite / libsql)]
+    Actions --> DB
+```
+
+## 7. Directory Structure
+
+| Directory | Purpose |
+| :--- | :--- |
+| `app/` | Next.js 15 App Router pages, layouts, and Server Actions. |
+| `components/` | Modular UI components (Strategic Console, Knowledge Graph visualization). |
+| `config/` | System configuration, expert model cards, and skill taxonomy. |
+| `hooks/` | Custom React hooks for state sync, PWA lifecycle, and data fetching. |
+| `lib/adapters/` | Concrete implementations for external services (OpenRouter, Chroma). |
+| `lib/goa/` | The core Graph-of-Agents engine (Sampling, Debate, Synthesis). |
+| `lib/kg/` | Knowledge Graph logic, triplet extraction, and persistence. |
+| `lib/ports/` | Interface definitions (Abstract Base Classes) for the GoA system. |
+| `lib/utils/` | Shared utilities (Redaction, Telemetry, Design Tokens). |
+| `public/` | Static assets, global styles, and PWA manifest. |
+| `scripts/` | Tooling for database migrations and system maintenance. |

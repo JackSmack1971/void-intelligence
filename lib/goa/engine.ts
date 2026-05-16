@@ -5,12 +5,15 @@ import {
   REFINEMENT_PROMPT,
   POOLING_SYNTHESIS_PROMPT,
   ADVERSARIAL_CRITIQUE_PROMPT,
-  PD_TOT_JUDGE_PROMPT
+  PD_TOT_JUDGE_PROMPT,
+  COMPLEXITY_CLASSIFICATION_PROMPT,
+  SUMMARIZATION_PROMPT
 } from "./prompts";
 import { KnowledgeGraph } from "../kg";
 import { Telemetry } from "../utils/telemetry";
 import { LLMProvider } from "../ports/llm";
 import { OpenRouterAdapter } from "../adapters/openrouter";
+import { DebateScheduler } from "./scheduler";
 
 const META_MODEL = "inclusionai/ring-2.6-1t:free";
 const JUDGE_MODEL = "deepseek/deepseek-v4-flash";
@@ -24,8 +27,14 @@ export class GoAOrchestrator {
     options: Partial<GoAContext> & { onStatus?: (status: string) => void; onFinalToken?: (token: string) => void } = {}
   ): Promise<GoAResult> {
     const kg = await KnowledgeGraph.getInstance();
-    const k = this.getDynamicK(query, options.k ?? 3);
+    
+    // Stage -1: Complexity Classification
+    options.onStatus?.("Analyzing query complexity...");
+    const complexity = await this.classifyComplexity(query);
+    options.complexity = complexity;
+    console.log(`[GoA] Complexity: ${complexity}`);
 
+    const k = this.getDynamicK(query, options.k ?? 3, complexity);
     const tau = options.tau ?? 0.05;
 
     console.log(`[GoA] Starting pipeline for query: "${query}" (k=${k})`);
@@ -34,7 +43,6 @@ export class GoAOrchestrator {
     // Stage 0: Memory Retrieval
     const memoryContext = await this.retrieveMemory(query, kg);
     if (memoryContext) options.onStatus?.("Memory Synchronized ✓");
-
 
     // Stage 1: Node Sampling
     const selectedAgents = await this.sampleNodes(query, allCards, k, memoryContext);
@@ -49,28 +57,72 @@ export class GoAOrchestrator {
 
     // Stage 4: Adversarial Debate
     options.onStatus?.("Initiating Adversarial Debate...");
-    const { finalResponses, metrics, debateLog } = await this.conductDebate(query, selectedAgents, initResponses, memoryContext, options);
+    const { finalResponses, metrics, debateLog, summarizedContext, iterations } = await this.conductDebate(query, selectedAgents, initResponses, memoryContext, options, matrix);
 
     // Stage 5: Final Synthesis
     options.onStatus?.("Synthesizing void consensus...");
-    const finalResponse = await this.synthesize(query, finalResponses, memoryContext, options);
+    const finalResponse = await this.synthesize(query, finalResponses, summarizedContext, options);
 
-    return this.finalize(query, finalResponse, selectedAgents, matrix, options, kg, metrics, debateLog);
+    const harmonyScore = this.calculateHarmonyScore(metrics, iterations);
+
+    return this.finalize(query, finalResponse, selectedAgents, matrix, options, kg, metrics, debateLog, harmonyScore);
   }
 
+  async resume(
+    query: string,
+    existingLog: { turn: number; model: string; content: string }[],
+    selectedAgents: ModelCard[],
+    matrix: AdjacencyMatrix,
+    options: any = {}
+  ): Promise<GoAResult> {
+    const kg = await KnowledgeGraph.getInstance();
+    const memoryContext = await this.retrieveMemory(query, kg);
 
-  private getDynamicK(query: string, defaultK: number): number {
+    // Initial responses from the last complete round in the log
+    const lastTurn = Math.max(...existingLog.map(l => l.turn));
+    const initResponses: AgentResponse[] = selectedAgents.map(agent => {
+      const entry = [...existingLog].reverse().find(l => l.model === agent.id && l.turn === lastTurn);
+      return { agentId: agent.id, content: entry?.content || "" };
+    });
+
+    const { finalResponses, metrics, debateLog, summarizedContext, iterations } = await this.conductDebate(
+      query, selectedAgents, initResponses, memoryContext, options, matrix
+    );
+
+    const finalResponse = await this.synthesize(query, finalResponses, summarizedContext, options);
+    const harmonyScore = this.calculateHarmonyScore(metrics, lastTurn + iterations);
+
+    return this.finalize(query, finalResponse, selectedAgents, matrix, options, kg, metrics, [...existingLog, ...debateLog], harmonyScore);
+  }
+
+  private async classifyComplexity(query: string): Promise<"low" | "medium" | "high"> {
+    try {
+      const response = await this.llm.chat(
+        [{ role: "user", content: COMPLEXITY_CLASSIFICATION_PROMPT(query) }],
+        { intent: "sampling", json_mode: true }
+      );
+      const { complexity } = JSON.parse(response);
+      return complexity || "medium";
+    } catch (e) {
+      return "medium";
+    }
+  }
+
+  private getDynamicK(query: string, defaultK: number, complexity: string): number {
+    let k = defaultK;
+    if (complexity === "high") k += 1;
+    if (complexity === "low") k = Math.max(k - 1, 2);
+
     const words = query.split(/\s+/).length;
-    if (words > 20) return Math.min(defaultK + 2, 5);
-    if (words < 5) return Math.max(defaultK - 1, 2);
-    return defaultK;
+    if (words > 20) k = Math.min(k + 1, 5);
+    return k;
   }
 
   private async retrieveMemory(query: string, kg: KnowledgeGraph): Promise<string | undefined> {
     const prompt = `User Query: "${query}"\nExtract 3-5 core entities or search keywords for a database search. Respond ONLY with a comma-separated list.`;
     const response = await this.llm.chat([{ role: "user", content: prompt }], { intent: "sampling" });
     const keywords = response.split(",").map(k => k.trim()).filter(Boolean);
-    const memoryTriplets = await kg.query(keywords);
+    const memoryTriplets = await kg.query(query, keywords);
     return memoryTriplets.length > 0
       ? memoryTriplets.map(t => `${t.subject} ${t.predicate} ${t.object}`).join("\n")
       : undefined;
@@ -122,7 +174,8 @@ export class GoAOrchestrator {
     agents: ModelCard[],
     initResponses: AgentResponse[],
     memoryContext: string | undefined,
-    options: any
+    options: any,
+    matrix: AdjacencyMatrix
   ) {
     const debateLog: { turn: number; model: string; content: string }[] = [];
     let currentResponses = initResponses;
@@ -130,28 +183,47 @@ export class GoAOrchestrator {
     const MAX_ITERATIONS = 3;
     let metrics: ConvergenceMetrics = { ksStatistic: 1, entropyReduction: 0, iterations: 0, isStable: false };
 
+    const waves = DebateScheduler.computeWaves(agents.map(a => a.id), matrix);
+
     while (iterations < MAX_ITERATIONS) {
       iterations++;
       options.onStatus?.(`Debate Round ${iterations}...`);
       
-      const critiques: string[] = await Promise.all(
-        currentResponses.map(async (resp, i) => {
-          const peerIdx = (i + 1) % currentResponses.length;
-          const critique = await this.llm.chat(
-            [{ role: "user", content: ADVERSARIAL_CRITIQUE_PROMPT(query, currentResponses[peerIdx].content, memoryContext) }],
-            { model: resp.agentId, intent: "refinement" }
-          );
-          debateLog.push({ turn: iterations, model: resp.agentId, content: `Critique of ${currentResponses[peerIdx].agentId}: ${critique}` });
-          return critique;
-        })
-      );
+      const roundCritiques: { [targetId: string]: string[] } = {};
+      agents.forEach(a => roundCritiques[a.id] = []);
+
+      // Mid-flight Pivot: Escalate judge model if struggling
+      const currentJudge = (iterations >= 2 && !metrics.isStable) ? "meta-llama/llama-3.3-70b" : JUDGE_MODEL;
+      if (currentJudge !== JUDGE_MODEL) console.log(`[GoA] Escalating to heavy model for Round ${iterations}`);
+
+      for (let w = 0; w < waves.length; w++) {
+        const wave = waves[w];
+        await Promise.all(
+          wave.map(async (agentId) => {
+            const agentIdx = agents.findIndex(a => a.id === agentId);
+            const peerIdx = (agentIdx + 1) % agents.length;
+            const targetAgent = agents[peerIdx];
+
+            const critique = await this.llm.chat(
+              [{ role: "user", content: ADVERSARIAL_CRITIQUE_PROMPT(query, currentResponses[peerIdx].content, memoryContext) }],
+              { model: agentId, intent: "refinement" }
+            );
+
+            roundCritiques[targetAgent.id].push(critique);
+            debateLog.push({ turn: iterations, model: agentId, content: `Critique of ${targetAgent.id}: ${critique}` });
+          })
+        );
+      }
 
       const newResponses: AgentResponse[] = await Promise.all(
-        currentResponses.map(async (resp, i) => {
-          const myCritique = critiques[i];
-          const peerCritiqueOfMe = critiques[(i - 1 + currentResponses.length) % currentResponses.length];
+        currentResponses.map(async (resp) => {
+          const critiquesOfMe = roundCritiques[resp.agentId];
+          const otherPerspectives = currentResponses
+            .filter(r => r.agentId !== resp.agentId)
+            .map(r => r.content);
+
           const refined = await this.llm.chat(
-            [{ role: "user", content: REFINEMENT_PROMPT(query, resp.content, [myCritique, peerCritiqueOfMe], memoryContext) }],
+            [{ role: "user", content: REFINEMENT_PROMPT(query, resp.content, critiquesOfMe, otherPerspectives, memoryContext) }],
             { model: resp.agentId, intent: "refinement" }
           );
           return { agentId: resp.agentId, content: refined };
@@ -160,7 +232,7 @@ export class GoAOrchestrator {
 
       const judgeResponse = await this.llm.chat(
         [{ role: "user", content: PD_TOT_JUDGE_PROMPT(query, currentResponses.map(r => r.content), newResponses.map(r => r.content)) }],
-        { model: JUDGE_MODEL, intent: "scoring", json_mode: true }
+        { model: currentJudge, intent: "scoring", json_mode: true }
       );
       const judgeResult = JSON.parse(judgeResponse);
       
@@ -174,12 +246,28 @@ export class GoAOrchestrator {
       const stability = (1 - metrics.ksStatistic) * 100;
       options.onStatus?.(`Debate Round ${iterations}: Stability ${stability.toFixed(0)}%`);
 
-
       currentResponses = newResponses;
       if (metrics.isStable) break;
     }
 
-    return { finalResponses: currentResponses, metrics, debateLog };
+    let summarizedContext = memoryContext;
+    if (iterations > 1) {
+      const fullLog = debateLog.map(l => `[Round ${l.turn}] ${l.model}: ${l.content}`).join("\n");
+      const summary = await this.llm.chat(
+        [{ role: "user", content: SUMMARIZATION_PROMPT(query, fullLog) }],
+        { model: JUDGE_MODEL, intent: "synthesis" }
+      );
+      summarizedContext = `${memoryContext}\n\n[DEBATE_SUMMARY]\n${summary}`;
+    }
+
+    return { finalResponses: currentResponses, metrics, debateLog, summarizedContext, iterations };
+  }
+
+  private calculateHarmonyScore(metrics: ConvergenceMetrics, iters: number): number {
+    const stability = 1 - metrics.ksStatistic;
+    const entropy = metrics.entropyReduction;
+    const speed = 1 / iters;
+    return (stability * 0.4) + (entropy * 0.3) + (speed * 0.3);
   }
 
   private async synthesize(query: string, responses: AgentResponse[], memoryContext: string | undefined, options: any): Promise<string> {
@@ -200,11 +288,11 @@ export class GoAOrchestrator {
     options: any,
     kg: KnowledgeGraph,
     metrics?: ConvergenceMetrics,
-    debateLog?: { turn: number; model: string; content: string }[]
+    debateLog?: { turn: number; model: string; content: string }[],
+    harmonyScore?: number
   ): Promise<GoAResult> {
     const transcript = `User: ${query}\nAssistant: ${finalResponse}`;
     kg.ingestTranscript(options.threadId || "global-thread", transcript);
-
 
     return {
       finalResponse,
@@ -213,7 +301,10 @@ export class GoAOrchestrator {
       sourceNodes: [],
       targetNodes: [],
       metrics,
-      debateLog
+      debateLog,
+      harmonyScore,
+      complexity: options.complexity,
+      adjacencyMatrix: matrix
     };
   }
 }

@@ -1,0 +1,114 @@
+{
+  "canonical_queue": [
+    {
+      "type": "readme",
+      "resolved_path": "README.md",
+      "mode": "supplement",
+      "preservation_mode": "supplement",
+      "wave": 1,
+      "status": "completed"
+    },
+    {
+      "type": "architecture",
+      "resolved_path": "docs/ARCHITECTURE.md",
+      "mode": "supplement",
+      "preservation_mode": "supplement",
+      "wave": 1,
+      "status": "completed"
+    },
+    {
+      "type": "configuration",
+      "resolved_path": "docs/CONFIGURATION.md",
+      "mode": "supplement",
+      "preservation_mode": "supplement",
+      "wave": 1,
+      "status": "completed"
+    },
+    {
+      "type": "getting_started",
+      "resolved_path": "docs/GETTING-STARTED.md",
+      "mode": "supplement",
+      "preservation_mode": "supplement",
+      "wave": 2,
+      "status": "completed"
+    },
+    {
+      "type": "development",
+      "resolved_path": "docs/DEVELOPMENT.md",
+      "mode": "supplement",
+      "preservation_mode": "supplement",
+      "wave": 2,
+      "status": "completed"
+    },
+    {
+      "type": "testing",
+      "resolved_path": "docs/TESTING.md",
+      "mode": "supplement",
+      "preservation_mode": "supplement",
+      "wave": 2,
+      "status": "completed"
+    },
+    {
+      "type": "deployment",
+      "resolved_path": "docs/DEPLOYMENT.md",
+      "mode": "create",
+      "preservation_mode": null,
+      "wave": 2,
+      "status": "completed"
+    }
+  ],
+  "review_queue": [
+    {
+      "path": "AGENTS.md",
+      "type": "hand-written",
+      "status": "pending_review"
+    },
+    {
+      "path": "CLAUDE.md",
+      "type": "hand-written",
+      "status": "pending_review"
+    },
+    {
+      "path": "docs/API.md",
+      "type": "hand-written",
+      "status": "pending_review"
+    },
+    {
+      "path": "docs/SKILL.md",
+      "type": "hand-written",
+      "status": "pending_review"
+    },
+    {
+      "path": "docs/Benchmark Compilation & Extrapolation Report.md",
+      "type": "hand-written",
+      "status": "pending_review"
+    },
+    {
+      "path": "docs/LLM Debate Judge Expertise Analysis.md",
+      "type": "hand-written",
+      "status": "pending_review"
+    }
+  ],
+  "gap_queue": [
+    {
+      "description": "UI components documentation",
+      "output_path": "docs/COMPONENTS.md",
+      "type": "custom",
+      "status": "completed"
+    },
+    {
+      "description": "GoA framework orchestration logic",
+      "output_path": "docs/GOA-FRAMEWORK.md",
+      "type": "custom",
+      "status": "completed"
+    },
+    {
+      "description": "Knowledge Graph logic and persistence",
+      "output_path": "docs/KNOWLEDGE-GRAPH.md",
+      "type": "custom",
+      "status": "completed"
+    }
+  ],
+  "created_at": "2026-05-16T12:14:00Z",
+  "completed_at": "2026-05-16T12:16:30Z"
+}

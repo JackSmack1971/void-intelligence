@@ -41,3 +41,27 @@ To add a new stage to the engine:
 1.  Run `npm run build` to verify TypeScript and Next.js compilation.
 2.  Run `npm run test` to verify logic integrity.
 3.  Ensure all new PII patterns are added to `lib/utils/redaction.ts`.
+
+## Local Setup
+
+1. **Fork and Clone**: `git clone <your-fork-url>`
+2. **Install**: `npm install`
+3. **Environment**: Copy `.env.example` to `.env.local` and add your `OPENROUTER_API_KEY`.
+4. **Initialize DB**: The SQLite database is automatically created on first run.
+
+## Build Commands
+
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Starts the Next.js development server. |
+| `npm run build` | Compiles the application for production. |
+| `npm run start` | Starts the production server. |
+| `npm run lint` | Runs ESLint for code quality checks. |
+| `npm run test` | Executes the Vitest test suite. |
+
+## Code Style
+
+- **Linting**: We use **ESLint** with Next.js defaults. Run `npm run lint` to check for issues.
+- **Formatting**: We follow standard Prettier-compatible formatting.
+- **TypeScript**: Strict type checking is enabled. Avoid using `any` whenever possible.
+- **Components**: Use functional components with hooks.

@@ -1,6 +1,7 @@
 import { initDb, storeTriplets, getRelevantMemory, storeMessage, getAllTriplets } from "./db";
 import { extractionQueue } from "./queue";
 import { Triplet } from "./extraction";
+import { getHybridMemory } from "./hybridRetriever";
 
 export class KnowledgeGraph {
   private static instance: KnowledgeGraph;
@@ -23,11 +24,13 @@ export class KnowledgeGraph {
     extractionQueue.enqueue(threadId, transcript);
   }
 
+
+
   /**
-   * Retrieve relevant knowledge for a query.
+   * Retrieve relevant knowledge for a query using hybrid retrieval.
    */
-  async query(keywords: string[]): Promise<Triplet[]> {
-    return getRelevantMemory(keywords);
+  async query(query: string, keywords: string[]): Promise<Triplet[]> {
+    return getHybridMemory(query, keywords);
   }
 
   /**
