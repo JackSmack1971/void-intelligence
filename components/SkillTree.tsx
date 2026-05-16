@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import ReactFlow, { Background, Node, Edge } from "reactflow";
 import "reactflow/dist/style.css";
 import SkillNode from "./SkillNode";
-import { ModelCard } from "../lib/goa/types";
+import { ModelCard } from "../lib/goa";
 
 const nodeTypes = {
   skill: SkillNode,

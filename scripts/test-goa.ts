@@ -1,5 +1,4 @@
-import { runGoA } from "../lib/goa/engine";
-import { ModelCard } from "../lib/goa/types";
+import { runGoA, ModelCard } from "../lib/goa";
 import * as fs from "fs";
 import * as path from "path";
 

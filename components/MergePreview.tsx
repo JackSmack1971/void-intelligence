@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { KnowledgeTriplet as Triplet } from "@/lib/goa/types";
+import { KnowledgeTriplet as Triplet } from "@/lib/goa";
 import { Check, X, Info, ShieldAlert, Database } from "lucide-react";
 
 interface Props {

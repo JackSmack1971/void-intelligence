@@ -12,7 +12,7 @@ function cn(...inputs: ClassValue[]) {
 
 import models from "../config/models.json";
 import SkillTree from "./SkillTree";
-import { ModelCard } from "../lib/goa/types";
+import { ModelCard } from "../lib/goa";
 
 interface SidebarProps {
   onExport: () => void;

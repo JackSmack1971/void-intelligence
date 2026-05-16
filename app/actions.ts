@@ -1,7 +1,6 @@
 "use server";
 
-import { GoAOrchestrator } from "@/lib/goa/engine";
-import { ModelCard, AdjacencyMatrix } from "@/lib/goa/types";
+import { GoAOrchestrator, ModelCard, AdjacencyMatrix } from "@/lib/goa";
 import * as fs from "fs";
 import * as path from "path";
 
