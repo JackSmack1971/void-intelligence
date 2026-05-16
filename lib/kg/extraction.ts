@@ -2,11 +2,7 @@ import { chatWithRetry } from "../openrouter/client";
 
 const EXTRACTION_MODEL = "openrouter/owl-alpha";
 
-export interface Triplet {
-  subject: string;
-  predicate: string;
-  object: string;
-}
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 
 export const EXTRACTION_PROMPT = (transcript: string) => `
 You are a world-class Knowledge Graph extraction agent. 

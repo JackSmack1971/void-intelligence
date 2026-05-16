@@ -1,26 +1,27 @@
 import { chatWithRetry } from "../openrouter/client";
-import { Triplet } from "./extraction";
+import { KnowledgeTriplet as Triplet } from "../goa/types";
 import { getConsolidationBatch, consolidateTriplets } from "./db";
 
 const CONSOLIDATION_MODEL = "deepseek/deepseek-chat:free";
 
 export const CONSOLIDATION_PROMPT = (triplets: Triplet[]) => `
-You are a Knowledge Graph Consolidation Agent. Your task is to prune, deduplicate, and canonicalize a set of semantic triplets.
+### SYSTEM ROLE
+You are a Knowledge Graph Consolidation Agent. Your goal is to prune, deduplicate, and canonicalize semantic triplets to maintain a sparse, high-fidelity graph.
 
-Raw Triplets:
+### RAW TRIPLETS
 ${JSON.parse(JSON.stringify(triplets, null, 2))}
 
-Requirements:
-1. Entity Resolution: Identify subjects/objects that refer to the same concept (e.g., "AI" and "Artificial Intelligence") and use a single canonical form.
-2. Deduplication: Remove identical triplets or those that are strictly redundant (e.g., if you have "X is Y" and "X defined_as Y", keep the most descriptive one).
-3. Conflict Resolution: If facts contradict, choose the most likely correct or general one.
-4. Information Density: Ensure the resulting graph is sparse but high-fidelity.
+### CONSOLIDATION RULES
+1. [Entity Resolution]: Merge subjects/objects referring to the same concept (e.g., "AI" and "Artificial Intelligence") into a single canonical form.
+2. [Deduplication]: Remove redundant or identical triplets. Keep the most descriptive predicate.
+3. [Conflict Resolution]: Prioritize the most general or factually accurate claim if contradictions exist.
+4. [Sparsity]: Ensure the resulting set is lean but retains all unique semantic information.
 
-Respond ONLY with a JSON object in this format:
+### OUTPUT SCHEMA
+Return ONLY a raw JSON object:
 {
   "consolidated": [
-    { "subject": "Canonical Subject", "predicate": "concise_predicate", "object": "Canonical Object" },
-    ...
+    { "subject": "string", "predicate": "string", "object": "string" }
   ]
 }
 `;
@@ -46,9 +47,16 @@ export async function runConsolidation() {
     );
 
     const { consolidated } = JSON.parse(response);
+    
+    // 3. Integrity Safeguard [BEH-3]
+    if (!consolidated || !Array.isArray(consolidated) || consolidated.length === 0) {
+      console.warn("[KG] LLM returned empty consolidation result. Aborting batch swap to prevent data loss.");
+      return;
+    }
+
     const newTriplets = consolidated as Triplet[];
 
-    // 3. Atomicly swap in the database
+    // 4. Atomicly swap in the database
     const oldIds = batch.map(b => b.id);
     await consolidateTriplets(oldIds, newTriplets);
     

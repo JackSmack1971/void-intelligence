@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runConsolidation } from "./consolidation";
+import { runConsolidation, CONSOLIDATION_PROMPT } from "./consolidation";
 import * as db from "./db";
 import * as client from "../openrouter/client";
 
@@ -43,5 +43,30 @@ describe("KG Consolidation Agent", () => {
       mockBatch.map(b => b.id),
       [{ subject: "Artificial Intelligence", predicate: "is", object: "Technology" }]
     );
+  });
+
+  it("aborts consolidation if LLM returns empty result [BEH-3]", async () => {
+    const mockBatch = Array(15).fill(0).map((_, i) => ({
+      id: i, subject: "A", predicate: "B", object: "C"
+    }));
+    vi.mocked(db.getConsolidationBatch).mockResolvedValue(mockBatch);
+    
+    vi.mocked(client.chatWithRetry).mockResolvedValue(JSON.stringify({
+      consolidated: []
+    }));
+
+    await runConsolidation();
+
+    expect(db.consolidateTriplets).not.toHaveBeenCalled();
+  });
+
+  it("CONSOLIDATION_PROMPT should use ### headers [BEH-1]", () => {
+    const prompt = CONSOLIDATION_PROMPT([
+      { subject: "A", predicate: "is", object: "B" }
+    ]);
+    expect(prompt).toContain("### SYSTEM ROLE");
+    expect(prompt).toContain("### RAW TRIPLETS");
+    expect(prompt).toContain("### CONSOLIDATION RULES");
+    expect(prompt).toContain("### OUTPUT SCHEMA");
   });
 });
