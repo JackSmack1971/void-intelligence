@@ -28,44 +28,43 @@ export class GoAOrchestrator {
   ): Promise<GoAResult> {
     const kg = await KnowledgeGraph.getInstance();
     
-    // Stage -1: Complexity Classification
     options.onStatus?.("Analyzing query complexity...");
-    const complexity = await this.classifyComplexity(query);
+    const complexity = await this.determineComplexity(query);
     options.complexity = complexity;
-    console.log(`[GoA] Complexity: ${complexity}`);
 
     const k = this.getDynamicK(query, options.k ?? 3, complexity);
-    const tau = options.tau ?? 0.05;
-
-    console.log(`[GoA] Starting pipeline for query: "${query}" (k=${k})`);
     options.onStatus?.("Synchronizing memory...");
 
-    // Stage 0: Memory Retrieval
     const memoryContext = await this.retrieveMemory(query, kg);
     if (memoryContext) options.onStatus?.("Memory Synchronized ✓");
 
-    // Stage 1: Node Sampling
-    const selectedAgents = await this.sampleNodes(query, allCards, k, memoryContext);
+    const selectedAgents = await this.selectExpertAgents(query, allCards, k, memoryContext);
     options.onStatus?.("Experts generating initial responses...");
 
-    // Stage 2: Initial Responses
     const initResponses = await this.generateInitialResponses(query, selectedAgents);
 
-    // Stage 3: Cross-Evaluation
     options.onStatus?.("Cross-evaluating expert reasoning...");
-    const matrix = await this.scoreMatrix(query, selectedAgents, initResponses, memoryContext);
+    const adjacencyMatrix = await this.computeAdjacencyMatrix(query, selectedAgents, initResponses, memoryContext);
 
-    // Stage 4: Adversarial Debate
     options.onStatus?.("Initiating Adversarial Debate...");
-    const { finalResponses, metrics, debateLog, summarizedContext, iterations } = await this.conductDebate(query, selectedAgents, initResponses, memoryContext, options, matrix);
+    const debate = await this.conductDebate(query, selectedAgents, initResponses, memoryContext, options, adjacencyMatrix);
 
-    // Stage 5: Final Synthesis
     options.onStatus?.("Synthesizing void consensus...");
-    const finalResponse = await this.synthesize(query, finalResponses, summarizedContext, options);
+    const finalResponse = await this.synthesize(query, debate.finalResponses, debate.summarizedContext, options);
 
-    const harmonyScore = this.calculateHarmonyScore(metrics, iterations);
+    const harmonyScore = this.calculateHarmonyScore(debate.metrics, debate.iterations);
 
-    return this.finalize(query, finalResponse, selectedAgents, matrix, options, kg, metrics, debateLog, harmonyScore);
+    return this.finalize(
+      query, 
+      finalResponse, 
+      selectedAgents, 
+      adjacencyMatrix, 
+      options, 
+      kg, 
+      debate.metrics, 
+      debate.debateLog, 
+      harmonyScore
+    );
   }
 
   async resume(
@@ -95,7 +94,7 @@ export class GoAOrchestrator {
     return this.finalize(query, finalResponse, selectedAgents, matrix, options, kg, metrics, [...existingLog, ...debateLog], harmonyScore);
   }
 
-  private async classifyComplexity(query: string): Promise<"low" | "medium" | "high"> {
+  private async determineComplexity(query: string): Promise<"low" | "medium" | "high"> {
     try {
       const response = await this.llm.chat(
         [{ role: "user", content: COMPLEXITY_CLASSIFICATION_PROMPT(query) }],
@@ -103,7 +102,8 @@ export class GoAOrchestrator {
       );
       const { complexity } = JSON.parse(response);
       return complexity || "medium";
-    } catch (e) {
+    } catch (error) {
+      console.warn("[GoA] Complexity classification failed, defaulting to medium", error);
       return "medium";
     }
   }
@@ -115,7 +115,8 @@ export class GoAOrchestrator {
 
     const words = query.split(/\s+/).length;
     if (words > 20) k = Math.min(k + 1, 5);
-    return k;
+
+    return Math.min(k, 5);
   }
 
   private async retrieveMemory(query: string, kg: KnowledgeGraph): Promise<string | undefined> {
@@ -129,13 +130,13 @@ export class GoAOrchestrator {
   }
 
 
-  private async sampleNodes(query: string, allCards: ModelCard[], k: number, memoryContext?: string): Promise<ModelCard[]> {
+  private async selectExpertAgents(query: string, allCards: ModelCard[], k: number, memoryContext?: string): Promise<ModelCard[]> {
     const response = await this.llm.chat(
       [{ role: "user", content: NODE_SAMPLING_PROMPT(query, allCards, k, memoryContext) }],
       { intent: "sampling", json_mode: true }
     );
     const { selected_ids } = JSON.parse(response);
-    return allCards.filter(c => selected_ids.includes(c.id));
+    return allCards.filter(c => selected_ids.includes(c.id)).slice(0, k);
   }
 
   private async generateInitialResponses(query: string, agents: ModelCard[]): Promise<AgentResponse[]> {
@@ -147,7 +148,7 @@ export class GoAOrchestrator {
     );
   }
 
-  private async scoreMatrix(query: string, agents: ModelCard[], responses: AgentResponse[], memoryContext?: string): Promise<AdjacencyMatrix> {
+  private async computeAdjacencyMatrix(query: string, agents: ModelCard[], responses: AgentResponse[], memoryContext?: string): Promise<AdjacencyMatrix> {
     const matrix: AdjacencyMatrix = {};
     await Promise.all(
       agents.map(async sourceAgent => {
