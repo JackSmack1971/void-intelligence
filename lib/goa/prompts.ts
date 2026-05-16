@@ -4,15 +4,20 @@ const FORMAT_MEMORY = (memory?: string) =>
   memory ? `\n\n[LOCAL_MEMORY_CONTEXT]\n${memory}\n(Priority: Use these stored facts to personalize your response.)\n` : "";
 
 export const NODE_SAMPLING_PROMPT = (query: string, cards: ModelCard[], k: number, memory?: string) => `
-You are the Meta-LLM orchestrator. Select the top ${k} agents for the user query.
+You are the Meta-LLM orchestrator. Perform Taxonomy-Aware Sampling to select the top ${k} agents for the user query.
+
+Step 1: Identify the "Required Skill Paths" from the taxonomy that are relevant to the query.
+Step 2: Select ${k} agents whose skill tags best match the identified paths.
+
 ${FORMAT_MEMORY(memory)}
 Query: "${query}"
 
-Agents:
-${cards.map(c => `- [${c.id}] ${c.name}: ${c.description}`).join("\n")}
+Agents & Their Skills:
+${cards.map(c => `- [${c.id}] ${c.name}: ${c.description}\n  Skills: ${c.skills?.join(", ") || "General"}`).join("\n")}
 
 Respond ONLY with JSON:
 {
+  "required_skill_paths": ["Path1/SubPath", "Path2"],
   "selected_ids": ["id1", "id2", "id3"],
   "rationale": "Reason"
 }

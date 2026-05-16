@@ -1,15 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import ChatInput from "@/components/ChatInput";
-import { FeatureCard } from "@/components/FeatureCard";
-import { MessageSquare, Sparkles, Code, BarChart3, Bot, ChevronRight } from "lucide-react";
+import { MessageSquare, Sparkles, Code, BarChart3, Bot, ChevronRight, Activity, Eye, EyeOff } from "lucide-react";
+import DebateGraph from "@/components/DebateGraph";
 import { processChat } from "./actions";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  status?: string;
+  metrics?: any;
+  debateLog?: any[];
+  showDebate?: boolean;
 }
 
 export default function Home() {
@@ -43,8 +44,10 @@ export default function Home() {
         const assistantMessage: Message = { 
           role: "assistant", 
           content: result.data.finalResponse,
-          metrics: result.data.metrics
-        } as any;
+          metrics: result.data.metrics,
+          debateLog: result.data.debateLog,
+          showDebate: false
+        };
         setMessages(prev => [...prev, assistantMessage]);
         
         // Trigger extraction status (matches 5s server debounce)
@@ -144,12 +147,28 @@ export default function Home() {
                         </span>
                         <span className="flex items-center">
                           <ChevronRight className="w-3 h-3 mr-1 text-pink-400" />
-                          Turns: {(msg as any).metrics.iterations}
+                          Turns: {msg.metrics.iterations}
                         </span>
                       </div>
-                      <span className="text-green-500/80">Consensus Reached</span>
+                      
+                      <button 
+                        onClick={() => {
+                          const newMessages = [...messages];
+                          newMessages[i].showDebate = !newMessages[i].showDebate;
+                          setMessages(newMessages);
+                        }}
+                        className="flex items-center gap-1 hover:text-purple-400 transition-colors"
+                      >
+                        {msg.showDebate ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        {msg.showDebate ? "Hide Debate" : "View Debate"}
+                      </button>
                     </div>
                   )}
+
+                  {msg.role === "assistant" && msg.showDebate && msg.debateLog && (
+                    <DebateGraph debateLog={msg.debateLog} />
+                  )}
+
                 </div>
               </div>
             ))}

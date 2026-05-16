@@ -4,34 +4,39 @@
     "name": "Ring 2.6 1T",
     "role": "meta",
     "description": "Meta-LLM optimized for adaptive node sampling and agentic routing. 1T parameter scale with 63B active parameters.",
-    "capabilities": ["routing", "evaluation", "planning"]
+    "capabilities": ["routing", "evaluation", "planning"],
+    "skills": ["Creative & Synthesis/Dialectic Synthesis", "Logic & Reasoning/Strategic Planning"]
   },
   {
     "id": "qwen/qwen3-235b-a22b-thinking:free",
     "name": "Qwen3 Thinking",
     "role": "logic",
     "description": "High-capability logic engine with Dual Chunk Attention. Optimized for multi-hop reasoning and complex logical derivation.",
-    "capabilities": ["logic", "math", "reasoning"]
+    "capabilities": ["logic", "math", "reasoning"],
+    "skills": ["Logic & Reasoning/Formal Logic", "Logic & Reasoning/Mathematical Reasoning"]
   },
   {
     "id": "openrouter/owl-alpha",
     "name": "Owl Alpha",
     "role": "extraction",
     "description": "Specialized for zero-error structured output (JSON/triplets). Features 262k token output capacity.",
-    "capabilities": ["extraction", "structured-output", "graph-building"]
+    "capabilities": ["extraction", "structured-output", "graph-building"],
+    "skills": ["Knowledge Extraction/Semantic Mapping", "Knowledge Extraction/Structured Synthesis"]
   },
   {
     "id": "nvidia/nemotron-3-super-120b-a12b:free",
     "name": "Nemotron 3 Super",
     "role": "general",
     "description": "Robust baseline with hybrid Mamba-Transformer architecture. Excellent for general instruction following and safety.",
-    "capabilities": ["general", "instruction-following", "safety"]
+    "capabilities": ["general", "instruction-following", "safety"],
+    "skills": ["Creative & Synthesis/Narrative Construction"]
   },
   {
     "id": "inclusionai/ling-2.6-1t:free",
     "name": "Ling 2.6 1T",
     "role": "fast",
     "description": "High-throughput, low-latency alternative to Ring for rapid thinking and simple routing tasks.",
-    "capabilities": ["fast-thinking", "general"]
+    "capabilities": ["fast-thinking", "general"],
+    "skills": ["Creative & Synthesis/Narrative Construction", "Knowledge Extraction/Pattern Recognition"]
   }
 ]

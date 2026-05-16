@@ -4,6 +4,7 @@ export interface ModelCard {
   role: string;
   description: string;
   capabilities: string[];
+  skills?: string[];
 }
 
 export interface AgentResponse {

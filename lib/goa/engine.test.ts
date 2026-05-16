@@ -1,56 +1,56 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runGoA } from './engine';
-import * as client from '../openrouter/client';
+import { GoAOrchestrator } from './engine';
+import { LLMProvider } from '../ports/llm';
 
-vi.mock('../openrouter/client', () => ({
-  chatWithRetry: vi.fn(),
-  streamChat: vi.fn(),
-}));
-
-describe('runGoA engine', () => {
+describe('GoAOrchestrator', () => {
   const mockCards = [
     { id: 'agent-1', name: 'Agent 1', role: 'logic', description: 'desc', capabilities: [] },
     { id: 'agent-2', name: 'Agent 2', role: 'extraction', description: 'desc', capabilities: [] },
     { id: 'agent-3', name: 'Agent 3', role: 'meta', description: 'desc', capabilities: [] },
   ];
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  let mockLlm: LLMProvider;
 
-  it('should execute all stages of the GoA pipeline', async () => {
+  beforeEach(() => {
+    mockLlm = {
+      chat: vi.fn(),
+      stream: vi.fn(),
+    };
+
     let scoreCounter = 0;
-    (client.chatWithRetry as any).mockImplementation((messages: any, options: any) => {
+    (mockLlm.chat as any).mockImplementation((messages: any, options: any) => {
       const prompt = messages[0].content;
       const intent = options.intent;
 
-      // Stage 0: Memory
-      if (prompt.includes('Extract 3-5 core entities')) {
-        return Promise.resolve('keyword1, keyword2');
+      if (prompt.includes('Extract 3-5 core entities')) return Promise.resolve('keyword1');
+      if (intent === 'sampling') return Promise.resolve(JSON.stringify({ 
+        required_skill_paths: ['Logic/Formal'],
+        selected_ids: ['agent-1', 'agent-2', 'agent-3'] 
+      }));
+      if (intent === 'scoring' && prompt.includes('Evaluate the response')) {
+        return Promise.resolve(JSON.stringify({ score: (scoreCounter++ % 2) }));
       }
-      // Stage 1: Node Sampling
-      if (intent === 'sampling' || prompt.includes('Select the top')) {
-        return Promise.resolve(JSON.stringify({ selected_ids: ['agent-1', 'agent-2', 'agent-3'] }));
+      if (intent === 'scoring' && prompt.includes('Adjudicating Semantic Judge')) {
+        return Promise.resolve(JSON.stringify({
+          convergenceScore: 0.9,
+          ksStatistic: 0.05,
+          entropyReduction: 0.1,
+          isStable: true,
+          rationale: "Consensus reached."
+        }));
       }
-      // Stage 3: Matrix Scoring
-      if (prompt.includes('Evaluate the response to')) {
-        const score = scoreCounter++ % 2;
-        return Promise.resolve(JSON.stringify({ score }));
-      }
-      // Stage 5: Pooling (GoA-Max)
-      if (prompt.includes('Select the best response')) {
-        return Promise.resolve(JSON.stringify({ best_index: 0 }));
-      }
-      // Stage 2/4: Generation/Refinement
-      return Promise.resolve('Refined/Initial Response');
+      if (intent === 'synthesis') return Promise.resolve('Final Synthesis Response');
+      return Promise.resolve('Standard Response');
     });
+  });
 
-    const result = await runGoA('test query', mockCards, { k: 3 });
+  it('should orchestrate the GoA pipeline using the provided LLM Port', async () => {
+    const orchestrator = new GoAOrchestrator(mockLlm);
+    const result = await orchestrator.run('test query', mockCards, { k: 3 });
 
     expect(result.selectedAgents).toHaveLength(3);
-    expect(result.sourceNodes.length + result.targetNodes.length).toBe(3);
-    // 1 (sample) + 3 (init) + 6 (score) + 3 (refine) + 1 (pool) = 14 calls
-    // But score calls depend on k. For k=3, it's 3*2 = 6.
-    expect(client.chatWithRetry).toHaveBeenCalled();
+    expect(result.finalResponse).toBeDefined();
+    expect(result.metrics?.isStable).toBe(true);
+    expect(mockLlm.chat).toHaveBeenCalled();
   });
 });

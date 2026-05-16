@@ -1,0 +1,10 @@
+{
+  "project_id": "PVT_proj_xxxxxxxx",
+  "repository_id": "R_xxxxxxxx",
+  "default_board": "HIDD Development Board",
+  "active_context_issue": null,
+  "antigravity_agent_manager": {
+    "auto_load_issue": true,
+    "default_personas": ["hidd-manager", "hidd-custodian"]
+  }
+}

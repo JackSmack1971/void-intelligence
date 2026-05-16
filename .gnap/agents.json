@@ -1,0 +1,12 @@
+{
+  "active_agents": [
+    {
+      "role": "hidd-manager",
+      "issue_number": 42,
+      "worktree": "wt-feature-42",
+      "status": "in_progress"
+    }
+  ],
+  "last_heartbeat": "2026-05-15T21:39:00Z",
+  "protocol_version": "1.0"
+}

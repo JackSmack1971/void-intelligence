@@ -1,0 +1,19 @@
+{
+  "taxonomy": {
+    "Logic & Reasoning": {
+      "Formal Logic": ["Syllogisms", "Predicate Logic", "Truth Tables"],
+      "Mathematical Reasoning": ["Calculus", "Statistics", "Algorithmic Analysis"],
+      "Strategic Planning": ["Goal Decomposition", "Scenario Analysis"]
+    },
+    "Knowledge Extraction": {
+      "Semantic Mapping": ["SPO Triplet Extraction", "Entity Linking"],
+      "Structured Synthesis": ["JSON/YAML Formatting", "Schema Enforcement"],
+      "Pattern Recognition": ["Anomaly Detection", "Trend Analysis"]
+    },
+    "Creative & Synthesis": {
+      "Dialectic Synthesis": ["Consensus Building", "Conflict Resolution"],
+      "Narrative Construction": ["Story Arcs", "Long-form Writing"],
+      "Style Transfer": ["Tone Adaptation", "Register Control"]
+    }
+  }
+}
