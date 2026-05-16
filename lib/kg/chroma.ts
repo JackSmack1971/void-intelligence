@@ -5,16 +5,25 @@ const client = new ChromaClient({ path: "http://localhost:8000" });
 
 export class VectorStore {
   private static instance: VectorStore;
+  private static initPromise: Promise<VectorStore> | null = null;
+  
   private collectionName = "void_triplets";
+  private isConnected = false;
 
   private constructor() {}
 
+  /**
+   * Enforces asynchronous thread-safety with static promise lock
+   */
   public static async getInstance(): Promise<VectorStore> {
-    if (!VectorStore.instance) {
-      VectorStore.instance = new VectorStore();
-      await VectorStore.instance.init();
+    if (!VectorStore.initPromise) {
+      const store = new VectorStore();
+      VectorStore.initPromise = store.init().then(() => {
+        VectorStore.instance = store;
+        return store;
+      });
     }
-    return VectorStore.instance;
+    return VectorStore.initPromise;
   }
 
   private async init() {
@@ -23,13 +32,20 @@ export class VectorStore {
       await client.getOrCreateCollection({
         name: this.collectionName,
       });
+      this.isConnected = true;
       console.log(`[Chroma] Initialized collection: ${this.collectionName}`);
     } catch (error) {
+      this.isConnected = false;
       console.error("[Chroma] Initialization failed. Is Docker running?", error);
     }
   }
 
   public async upsertTriplets(triplets: Triplet[]) {
+    // Short-circuit if disconnected or input is empty
+    if (!this.isConnected || !triplets || triplets.length === 0) {
+      return;
+    }
+
     try {
       const collection = await client.getCollection({ name: this.collectionName });
       const ids = triplets.map(t => `${t.subject}-${t.predicate}-${t.object}`);
@@ -42,11 +58,18 @@ export class VectorStore {
         metadatas,
       });
     } catch (error) {
+      // Gracefully track connection failure to avoid repeated timeouts
+      this.isConnected = false;
       console.warn("[Chroma] Upsert failed.", error);
     }
   }
 
   public async querySemantic(query: string, limit: number = 10): Promise<Triplet[]> {
+    // Short-circuit if query is empty/whitespace or client is disconnected
+    if (!this.isConnected || !query || !query.trim()) {
+      return [];
+    }
+
     try {
       const collection = await client.getCollection({ name: this.collectionName });
       const results = await collection.query({
@@ -62,6 +85,8 @@ export class VectorStore {
         object: meta.object,
       }));
     } catch (error) {
+      // Gracefully track connection failure to avoid repeated timeouts
+      this.isConnected = false;
       console.warn("[Chroma] Query failed. Falling back to SQLite only.", error);
       return [];
     }
