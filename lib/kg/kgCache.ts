@@ -11,12 +11,29 @@ const options = {
 
 const cache = new LRUCache<string, Triplet[]>(options);
 
+/**
+ * Helper to normalize key by trimming and lowercasing.
+ */
+function normalizeKey(key: string): string {
+  return (key || "").trim().toLowerCase();
+}
+
 export function getCache(key: string): Triplet[] | undefined {
-  return cache.get(key);
+  const normalized = normalizeKey(key);
+  // Short-circuit if normalized key is empty
+  if (!normalized) {
+    return undefined;
+  }
+  return cache.get(normalized);
 }
 
 export function setCache(key: string, triplets: Triplet[]): void {
-  cache.set(key, triplets);
+  const normalized = normalizeKey(key);
+  // Short-circuit on empty key or empty triplets array
+  if (!normalized || !triplets || triplets.length === 0) {
+    return;
+  }
+  cache.set(normalized, triplets);
 }
 
 export function clearCache(): void {
