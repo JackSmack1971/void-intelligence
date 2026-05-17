@@ -35,7 +35,7 @@ vi.mock("./actions", () => {
     processIntervention: vi.fn(),
     syncKg: vi.fn().mockResolvedValue({ success: true, data: [] }),
     getTripletsForExport: vi.fn(),
-    importSelectedTriplets: vi.fn()
+    importSelectedTripletsDelta: vi.fn()
   };
 });
 

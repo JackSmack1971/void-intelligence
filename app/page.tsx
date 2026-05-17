@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { MessageSquare, Sparkles, Code, BarChart3, Bot, ChevronRight, Activity, Eye, EyeOff, X } from "lucide-react";
 import DebateGraph from "@/components/DebateGraph";
 import StrategyDashboard from "@/components/StrategyDashboard";
-import { processChat, processIntervention, syncKg, getTripletsForExport, importSelectedTriplets } from "./actions";
+import { processChat, processIntervention, syncKg, getTripletsForExport, importSelectedTripletsDelta } from "./actions";
 import ChatInput from "@/components/ChatInput";
 import ChatMessage from "@/components/ChatMessage";
 import { FeatureCard } from "@/components/FeatureCard";
@@ -34,7 +34,7 @@ export default function Home() {
   const [isExtracting, setIsExtracting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const extractionTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [mergeData, setMergeData] = useState<{ newItems: any[], overlaps: any[] } | null>(null);
+  const [mergeData, setMergeData] = useState<{ added: any[], modified: any[], overlaps: any[] } | null>(null);
   
   const [activeTab, setActiveTab] = useState<string>("chat");
   const [graphTriplets, setGraphTriplets] = useState<any[]>([]);
@@ -119,8 +119,8 @@ export default function Home() {
               
               const existingRes = await syncKg();
               if (existingRes.success) {
-                const { newItems, overlaps } = await SyncService.diffTriplets(payload.triplets, existingRes.data || []);
-                setMergeData({ newItems, overlaps });
+                const { added, modified, overlaps } = await SyncService.diffTripletsDelta(payload.triplets, existingRes.data || []);
+                setMergeData({ added, modified, overlaps });
                 addNotification("Trail decrypted successfully. Previewing merge dataset.", "success");
               }
             } catch (err) {
@@ -134,12 +134,12 @@ export default function Home() {
     input.click();
   };
 
-  const confirmMerge = async (selected: any[]) => {
-    const res = await importSelectedTriplets(selected);
+  const confirmMerge = async (addedSelected: any[], modifiedSelected: any[]) => {
+    const res = await importSelectedTripletsDelta(addedSelected, modifiedSelected);
     if (res.success) {
       setMergeData(null);
       notifyUpdate();
-      addNotification(`Successfully merged ${selected.length} new relations.`, "success");
+      addNotification(`Successfully merged ${addedSelected.length + modifiedSelected.length} relations.`, "success");
     } else {
       addNotification("Merge operation failed.", "error");
     }
@@ -423,7 +423,8 @@ export default function Home() {
 
       {mergeData && (
         <MergePreview 
-          newItems={mergeData.newItems}
+          added={mergeData.added}
+          modified={mergeData.modified}
           overlaps={mergeData.overlaps}
           onConfirm={confirmMerge}
           onCancel={() => setMergeData(null)}
