@@ -3,14 +3,31 @@
 import { GoAOrchestrator, ModelCard, AdjacencyMatrix } from "@/lib/goa";
 import * as fs from "fs";
 import * as path from "path";
+import { KnowledgeGraph } from "@/lib/kg";
 
-const modelsPath = path.join(process.cwd(), "config/models.json");
-const allCards: ModelCard[] = JSON.parse(fs.readFileSync(modelsPath, "utf-8"));
+let cachedCards: ModelCard[] | null = null;
+
+async function getModelCardsCached(): Promise<ModelCard[]> {
+  if (cachedCards) return cachedCards;
+  try {
+    const modelsPath = path.join(process.cwd(), "config/models.json");
+    const content = await fs.promises.readFile(modelsPath, "utf-8");
+    cachedCards = JSON.parse(content);
+    return cachedCards || [];
+  } catch {
+    return [];
+  }
+}
 
 export async function processChat(query: string) {
+  const sanitizedQuery = (query || "").trim();
+  if (!sanitizedQuery) {
+    return { success: false, error: "Query cannot be empty or only whitespace." };
+  }
   try {
     const orchestrator = new GoAOrchestrator();
-    const result = await orchestrator.run(query, allCards);
+    const allCards = await getModelCardsCached();
+    const result = await orchestrator.run(sanitizedQuery, allCards);
     return { success: true, data: result };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -23,15 +40,18 @@ export async function processIntervention(
   selectedAgents: ModelCard[], 
   matrix: AdjacencyMatrix
 ) {
+  const sanitizedQuery = (query || "").trim();
+  if (!sanitizedQuery) {
+    return { success: false, error: "Intervention query cannot be empty or only whitespace." };
+  }
   try {
     const orchestrator = new GoAOrchestrator();
-    const result = await orchestrator.resume(query, existingLog, selectedAgents, matrix);
+    const result = await orchestrator.resume(sanitizedQuery, existingLog || [], selectedAgents || [], matrix);
     return { success: true, data: result };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
 }
-import { KnowledgeGraph } from "@/lib/kg";
 
 export async function syncKg() {
   try {
@@ -42,11 +62,18 @@ export async function syncKg() {
     return { success: false, error: error.message };
   }
 }
+
 export async function getTripletsForExport() {
   return syncKg();
 }
 
 export async function importSelectedTriplets(triplets: any[]) {
+  if (!Array.isArray(triplets)) {
+    return { success: false, error: "Invalid triplets payload: expected array." };
+  }
+  if (triplets.length === 0) {
+    return { success: true };
+  }
   try {
     const { storeTriplets } = await import("@/lib/kg/db");
     await storeTriplets(triplets);
