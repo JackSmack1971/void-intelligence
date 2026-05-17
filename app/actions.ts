@@ -82,3 +82,19 @@ export async function importSelectedTriplets(triplets: any[]) {
     return { success: false, error: error.message };
   }
 }
+
+export async function importSelectedTripletsDelta(
+  added: any[],
+  modified: any[]
+) {
+  if (!Array.isArray(added) || !Array.isArray(modified)) {
+    return { success: false, error: "Invalid triplets payload: expected arrays for added and modified." };
+  }
+  try {
+    const { replaceTriplets } = await import("@/lib/kg");
+    await replaceTriplets(added, modified);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}

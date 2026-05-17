@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { processChat, processIntervention, syncKg, importSelectedTriplets, getTripletsForExport } from "./actions";
+import { processChat, processIntervention, syncKg, importSelectedTriplets, getTripletsForExport, importSelectedTripletsDelta } from "./actions";
 
 // Mock @/lib/goa
 vi.mock("@/lib/goa", () => {
@@ -19,6 +19,7 @@ vi.mock("@/lib/goa", () => {
 // Mock @/lib/kg
 vi.mock("@/lib/kg", () => {
   const mockDump = vi.fn().mockResolvedValue([{ subject: "A", predicate: "is", object: "B" }]);
+  const mockReplaceTriplets = vi.fn().mockResolvedValue(undefined);
   const KnowledgeGraph = {
     getInstance: vi.fn().mockResolvedValue({
       dump: mockDump
@@ -26,7 +27,9 @@ vi.mock("@/lib/kg", () => {
   };
   return {
     KnowledgeGraph,
-    _mockDump: mockDump
+    replaceTriplets: mockReplaceTriplets,
+    _mockDump: mockDump,
+    _mockReplaceTriplets: mockReplaceTriplets
   };
 });
 
@@ -126,8 +129,32 @@ describe("app/actions [GREEN]", () => {
     expect(res.error).toBe("kg uninitialized");
   });
 
-  it("should successfully importSelectedTriplets", async () => {
+  it("should successfully import selected triplets", async () => {
     const res = await importSelectedTriplets([{ subject: "X", predicate: "y", object: "Z" }]);
     expect(res.success).toBe(true);
+  });
+
+  it("should successfully import selected triplets delta", async () => {
+    const res = await importSelectedTripletsDelta([], []);
+    expect(res.success).toBe(true);
+  });
+
+  it("should fail importSelectedTripletsDelta if the parameters are not valid arrays", async () => {
+    const res1 = await importSelectedTripletsDelta(null as any, []);
+    expect(res1.success).toBe(false);
+    expect(res1.error).toContain("expected arrays");
+
+    const res2 = await importSelectedTripletsDelta([], null as any);
+    expect(res2.success).toBe(false);
+    expect(res2.error).toContain("expected arrays");
+  });
+
+  it("should catch replaceTriplets exceptions and return failure in importSelectedTripletsDelta", async () => {
+    const { _mockReplaceTriplets } = await import("@/lib/kg") as any;
+    _mockReplaceTriplets.mockRejectedValueOnce(new Error("batch failed"));
+
+    const res = await importSelectedTripletsDelta([], []);
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("batch failed");
   });
 });
