@@ -12,14 +12,21 @@ function cn(...inputs: ClassValue[]) {
 
 import models from "../config/models.json";
 import SkillTree from "./SkillTree";
-import { ModelCard } from "../lib/goa";
+import { ModelCard } from "../lib/goa/types";
 
 interface SidebarProps {
-  onExport: () => void;
-  onImport: () => void;
+  onExport?: () => void;
+  onImport?: () => void;
+  activeTab?: string;
+  onChangeTab?: (tab: string) => void;
 }
 
-export function Sidebar({ onExport, onImport }: SidebarProps) {
+export function Sidebar({ 
+  onExport = () => {}, 
+  onImport = () => {}, 
+  activeTab = "chat", 
+  onChangeTab = () => {} 
+}: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleAction = (fn: () => void) => {
@@ -48,20 +55,38 @@ export function Sidebar({ onExport, onImport }: SidebarProps) {
             </h1>
           </div>
 
-          <button className="flex items-center gap-3 w-full p-3 rounded-md bg-gradient-to-r from-accent-blue to-accent-purple text-white font-medium hover:brightness-110 transition-all mb-8">
+          <button 
+            onClick={() => handleAction(() => onChangeTab("chat"))}
+            className="flex items-center gap-3 w-full p-3 rounded-md bg-gradient-to-r from-accent-blue to-accent-purple text-white font-medium hover:brightness-110 transition-all mb-8 shadow-md hover:shadow-lg"
+          >
             <Plus size={20} />
             <span>New Chat</span>
           </button>
 
           <nav className="flex-1 space-y-2 overflow-y-auto scrollbar-hide">
-            <NavItem icon={<MessageSquare size={20} />} label="Conversations" active />
-            <NavItem icon={<LayoutGrid size={20} />} label="Capabilities" />
+            <NavItem 
+              icon={<MessageSquare size={20} />} 
+              label="Conversations" 
+              active={activeTab === "chat"} 
+              onClick={() => handleAction(() => onChangeTab("chat"))}
+            />
+            <NavItem 
+              icon={<LayoutGrid size={20} />} 
+              label="Capabilities" 
+              active={activeTab === "capabilities"}
+              onClick={() => handleAction(() => onChangeTab("capabilities"))}
+            />
             
             <div className="mt-6 pt-6 border-t border-white/5">
               <SkillTree models={models as ModelCard[]} />
             </div>
 
-            <NavItem icon={<History size={20} />} label="History" />
+            <NavItem 
+              icon={<History size={20} />} 
+              label="History" 
+              active={activeTab === "history"}
+              onClick={() => handleAction(() => onChangeTab("history"))}
+            />
           </nav>
 
           <div className="pt-6 border-t border-border-subtle bg-surface-01">
@@ -80,10 +105,23 @@ export function Sidebar({ onExport, onImport }: SidebarProps) {
               </button>
             </div>
             
-            <NavItem icon={<Settings size={20} />} label="Settings" />
+            <NavItem 
+              icon={<Settings size={20} />} 
+              label="Settings" 
+              active={activeTab === "settings"}
+              onClick={() => handleAction(() => onChangeTab("settings"))}
+            />
             
             <div className="space-y-1 mb-4 mt-4">
-              <button className="w-full flex items-center justify-between p-2 rounded-md bg-gray-800/50 text-gray-200 border border-gray-700/50 hover:bg-gray-800 transition-colors">
+              <button 
+                onClick={() => handleAction(() => onChangeTab("graph"))}
+                className={cn(
+                  "w-full flex items-center justify-between p-2 rounded-md transition-colors border",
+                  activeTab === "graph"
+                    ? "bg-purple-600/20 text-purple-200 border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.25)] ring-1 ring-purple-500/30"
+                    : "bg-gray-800/50 text-gray-200 border-gray-700/50 hover:bg-gray-800"
+                )}
+              >
                 <div className="flex items-center space-x-3">
                   <LayoutDashboard className="w-4 h-4 text-purple-400" />
                   <span className="text-sm font-medium">Knowledge Graph</span>
@@ -91,7 +129,7 @@ export function Sidebar({ onExport, onImport }: SidebarProps) {
               </button>
             </div>
 
-            <div className="mt-4 flex items-center gap-3 p-2">
+            <div className="mt-4 flex items-center gap-3 p-2 border-t border-white/5">
               <div className="w-8 h-8 rounded-full bg-surface-02 border border-border-subtle" />
               <div className="flex-1 overflow-hidden">
                 <p className="text-sm font-medium truncate">User Session</p>
@@ -113,9 +151,17 @@ export function Sidebar({ onExport, onImport }: SidebarProps) {
   );
 }
 
-function NavItem({ icon, label, active }: { icon: React.ReactNode; label: string; active?: boolean }) {
+interface NavItemProps {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+}
+
+function NavItem({ icon, label, active, onClick }: NavItemProps) {
   return (
     <div
+      onClick={onClick}
       className={cn(
         "flex items-center gap-3 p-3 rounded-sm cursor-pointer transition-all hover:bg-accent-blue/10 hover:text-accent-blue-light",
         active ? "bg-surface-02 text-accent-blue-light" : "text-text-primary"
