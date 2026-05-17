@@ -5,7 +5,7 @@ import { getHybridMemory } from "./hybridRetriever";
 
 // Public Barrel Exports
 export { SyncService } from "./sync";
-export type { TrailPayload } from "./sync";
+export type { TrailPayload, TripletDiff } from "./sync";
 export { getHybridMemory } from "./hybridRetriever";
 export { initDb, storeTriplets, getAllTriplets, getRelevantMemory };
 

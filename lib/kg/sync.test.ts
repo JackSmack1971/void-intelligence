@@ -52,4 +52,37 @@ describe("SyncService [RED]", () => {
     await expect(SyncService.decryptTrail(enc2, passphrase)).rejects.toThrow();
     await expect(SyncService.decryptTrail(enc3, passphrase)).rejects.toThrow();
   });
+
+  it("should classify incoming triplets correctly into added, modified, and overlaps categories in diffTripletsDelta", async () => {
+    const incoming = [
+      { subject: "Agent", predicate: "uses", object: "Tools" }, // Overlap (case-insensitive & trimmed match)
+      { subject: "Agent", predicate: "performs", object: "Tasks" }, // Modified SP
+      { subject: "Model", predicate: "knows", object: "Data" }, // Modified SO
+      { subject: "NewConcept", predicate: "is", object: "Discovered" } // Added
+    ];
+
+    const existing = [
+      { subject: "  agent  ", predicate: "USES", object: "tools  " },
+      { subject: "Agent", predicate: "performs", object: "Jobs" },
+      { subject: "Model", predicate: "has", object: "Data" }
+    ];
+
+    const { added, modified, overlaps } = await SyncService.diffTripletsDelta(incoming, existing);
+
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0]).toEqual(incoming[0]);
+
+    expect(modified).toHaveLength(2);
+    expect(modified).toContainEqual({
+      original: existing[1],
+      updated: incoming[1]
+    });
+    expect(modified).toContainEqual({
+      original: existing[2],
+      updated: incoming[2]
+    });
+
+    expect(added).toHaveLength(1);
+    expect(added[0]).toEqual(incoming[3]);
+  });
 });

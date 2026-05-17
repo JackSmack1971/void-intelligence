@@ -8,6 +8,12 @@ export interface TrailPayload {
   threadId?: string;
 }
 
+export interface TripletDiff {
+  added: Triplet[];
+  modified: { original: Triplet; updated: Triplet }[];
+  overlaps: Triplet[];
+}
+
 /**
  * Orchestrates the export and import of intelligence trails.
  */
@@ -99,5 +105,97 @@ export class SyncService {
     }
 
     return { newItems, overlaps };
+  }
+
+  /**
+   * Compare incoming triplets with existing ones to find added, modified, and overlapping items.
+   */
+  static async diffTripletsDelta(incoming: Triplet[], existing: Triplet[]): Promise<TripletDiff> {
+    const added: Triplet[] = [];
+    const modified: { original: Triplet; updated: Triplet }[] = [];
+    const overlaps: Triplet[] = [];
+
+    const canonicalKey = (t: Triplet) => 
+      t && t.subject && t.predicate && t.object
+        ? `${t.subject.trim().toLowerCase()}-${t.predicate.trim().toLowerCase()}-${t.object.trim().toLowerCase()}`
+        : "";
+
+    const spKey = (t: Triplet) =>
+      t && t.subject && t.predicate
+        ? `${t.subject.trim().toLowerCase()}-${t.predicate.trim().toLowerCase()}`
+        : "";
+
+    const soKey = (t: Triplet) =>
+      t && t.subject && t.object
+        ? `${t.subject.trim().toLowerCase()}-${t.object.trim().toLowerCase()}`
+        : "";
+
+    const existingKeys = new Set(
+      (existing || [])
+        .filter(t => t && t.subject && t.predicate && t.object)
+        .map(canonicalKey)
+    );
+
+    // Build lookup maps for existing items to match modified cases
+    const existingSP = new Map<string, Triplet[]>();
+    const existingSO = new Map<string, Triplet[]>();
+
+    for (const t of existing || []) {
+      if (!t || !t.subject || !t.predicate || !t.object) continue;
+      
+      const sp = spKey(t);
+      if (!existingSP.has(sp)) existingSP.set(sp, []);
+      existingSP.get(sp)!.push(t);
+
+      const so = soKey(t);
+      if (!existingSO.has(so)) existingSO.set(so, []);
+      existingSO.get(so)!.push(t);
+    }
+
+    for (const t of incoming || []) {
+      if (!t || !t.subject || !t.predicate || !t.object) continue;
+      
+      const full = canonicalKey(t);
+      if (existingKeys.has(full)) {
+        overlaps.push(t);
+        continue;
+      }
+
+      // Check if this is a modification of an existing triplet
+      const sp = spKey(t);
+      const so = soKey(t);
+      
+      let matchedOriginal: Triplet | null = null;
+
+      // 1. Prioritize same Subject-Predicate, different Object
+      if (existingSP.has(sp)) {
+        const candidates = existingSP.get(sp)!;
+        const match = candidates.find(
+          c => c.object.trim().toLowerCase() !== t.object.trim().toLowerCase()
+        );
+        if (match) {
+          matchedOriginal = match;
+        }
+      }
+
+      // 2. Fall back to same Subject-Object, different Predicate
+      if (!matchedOriginal && existingSO.has(so)) {
+        const candidates = existingSO.get(so)!;
+        const match = candidates.find(
+          c => c.predicate.trim().toLowerCase() !== t.predicate.trim().toLowerCase()
+        );
+        if (match) {
+          matchedOriginal = match;
+        }
+      }
+
+      if (matchedOriginal) {
+        modified.push({ original: matchedOriginal, updated: t });
+      } else {
+        added.push(t);
+      }
+    }
+
+    return { added, modified, overlaps };
   }
 }
