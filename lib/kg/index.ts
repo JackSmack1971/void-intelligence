@@ -1,4 +1,4 @@
-import { initDb, storeTriplets, getRelevantMemory, storeMessage, getAllTriplets } from "./db";
+import { initDb, storeTriplets, getRelevantMemory, storeMessage, getAllTriplets, replaceTriplets } from "./db";
 import { extractionQueue } from "./queue";
 import { KnowledgeTriplet as Triplet } from "../goa/types";
 import { getHybridMemory } from "./hybridRetriever";
@@ -7,7 +7,7 @@ import { getHybridMemory } from "./hybridRetriever";
 export { SyncService } from "./sync";
 export type { TrailPayload, TripletDiff } from "./sync";
 export { getHybridMemory } from "./hybridRetriever";
-export { initDb, storeTriplets, getAllTriplets, getRelevantMemory };
+export { initDb, storeTriplets, getAllTriplets, getRelevantMemory, replaceTriplets };
 
 export class KnowledgeGraph {
   private static instance: KnowledgeGraph;

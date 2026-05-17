@@ -144,6 +144,41 @@ export async function consolidateTriplets(oldIds: number[], newTriplets: Triplet
 }
 
 /**
+ * Atomicly swap selected added and modified triplets inside an ACID SQLite batch.
+ */
+export async function replaceTriplets(
+  added: Triplet[],
+  modified: { original: Triplet; updated: Triplet }[]
+) {
+  const deleteStmts = modified.map(m => ({
+    sql: "DELETE FROM triplets WHERE subject = ? AND predicate = ? AND object = ?",
+    args: [m.original.subject, m.original.predicate, m.original.object]
+  }));
+
+  const insertModifiedStmts = modified.map(m => ({
+    sql: "INSERT INTO triplets (subject, predicate, object) VALUES (?, ?, ?)",
+    args: [m.updated.subject, m.updated.predicate, m.updated.object]
+  }));
+
+  const insertAddedStmts = added.map(t => ({
+    sql: "INSERT INTO triplets (subject, predicate, object) VALUES (?, ?, ?)",
+    args: [t.subject, t.predicate, t.object]
+  }));
+
+  const allStmts = [...deleteStmts, ...insertModifiedStmts, ...insertAddedStmts];
+  if (allStmts.length === 0) return;
+
+  await client.batch(allStmts, "write");
+
+  const newTriplets = [...added, ...modified.map(m => m.updated)];
+  if (newTriplets.length > 0) {
+    VectorStore.getInstance()
+      .then(v => v.upsertTriplets(newTriplets))
+      .catch(e => console.warn("[Chroma] Sync failed", e));
+  }
+}
+
+/**
  * Delete a triplet
  */
 export async function deleteTriplet(subject: string, predicate: string, object: string) {
