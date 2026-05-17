@@ -6,7 +6,9 @@ import DebateGraph from "@/components/DebateGraph";
 import StrategyDashboard from "@/components/StrategyDashboard";
 import { processChat, processIntervention, syncKg, getTripletsForExport, importSelectedTriplets } from "./actions";
 import ChatInput from "@/components/ChatInput";
+import ChatMessage from "@/components/ChatMessage";
 import { FeatureCard } from "@/components/FeatureCard";
+
 import { Sidebar } from "@/components/Sidebar";
 import { useSharedWorker } from "@/hooks/useSharedWorker";
 import { LocalPersistence } from "@/lib/kg/idb";
@@ -351,70 +353,29 @@ export default function Home() {
               ) : (
                 <div className="max-w-4xl mx-auto space-y-8">
                   {messages.map((msg, i) => (
-                    <div 
-                      key={i} 
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+                    <ChatMessage
+                      key={i}
+                      message={msg}
+                      index={i}
+                      onToggleConsole={(idx) => {
+                        const newMessages = [...messages];
+                        newMessages[idx].showDebate = !newMessages[idx].showDebate;
+                        setMessages(newMessages);
+                      }}
                     >
-                      <div className={`
-                        max-w-[85%] px-5 py-3 rounded-md text-sm leading-relaxed relative group
-                        ${msg.role === "user" 
-                          ? "bg-blue-600 text-white" 
-                          : "bg-gray-800/50 backdrop-blur-md border border-gray-700/50 text-gray-200"
-                        }
-                      `}>
-                        {msg.content}
-                        
-                        {msg.role === "assistant" && msg.metrics && (
-                          <>
-                            <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-widest font-medium">
-                              <div className="flex items-center space-x-4">
-                                <span className="flex items-center">
-                                  <BarChart3 className="w-3 h-3 mr-1 text-blue-400" />
-                                  Stability: {((1 - msg.metrics.ksStatistic) * 100).toFixed(0)}%
-                                </span>
-                                <span className="flex items-center">
-                                  <Sparkles className="w-3 h-3 mr-1 text-purple-400" />
-                                  Harmony: {((msg.metrics.harmonyScore || 0) * 100).toFixed(0)}%
-                                </span>
-                                <span className="flex items-center">
-                                  <ChevronRight className="w-3 h-3 mr-1 text-pink-400" />
-                                  Turns: {msg.metrics.iterations}
-                                </span>
-                              </div>
-                              
-                              <button 
-                                onClick={() => {
-                                  const newMessages = [...messages];
-                                  newMessages[i].showDebate = !newMessages[i].showDebate;
-                                  setMessages(newMessages);
-                                }}
-                                className="flex items-center gap-1 hover:text-purple-400 transition-colors"
-                              >
-                                {msg.showDebate ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                                {msg.showDebate ? "Hide Strategic Console" : "Open Strategic Console"}
-                              </button>
-                            </div>
-
-                            {msg.showDebate && (
-                              <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-500">
-                                <StrategyDashboard 
-                                  complexity={msg.complexity}
-                                  harmonyScore={msg.metrics.harmonyScore}
-                                  iterations={msg.metrics.iterations}
-                                  k={msg.selectedAgents?.length}
-                                />
-                                {msg.debateLog && (
-                                  <DebateGraph 
-                                    debateLog={msg.debateLog} 
-                                    onIntervene={(modelId, type) => handleIntervene(i, modelId, type)}
-                                  />
-                                )}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
+                      <StrategyDashboard 
+                        complexity={msg.complexity}
+                        harmonyScore={msg.metrics?.harmonyScore}
+                        iterations={msg.metrics?.iterations}
+                        k={msg.selectedAgents?.length}
+                      />
+                      {msg.debateLog && (
+                        <DebateGraph 
+                          debateLog={msg.debateLog} 
+                          onIntervene={(modelId, type) => handleIntervene(i, modelId, type)}
+                        />
+                      )}
+                    </ChatMessage>
                   ))}
                   
                   {isLoading && (
