@@ -7,6 +7,8 @@ const PATTERNS = {
   EMAIL: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
   SSN: /\d{3}-\d{2}-\d{4}/g,
   PHONE: /(?:\+\d{1,2}\s?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/g,
+  IP_ADDRESS: /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/g,
+  CREDIT_CARD: /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g,
 };
 
 export function redactPII(text: string): { redactedText: string; map: Record<string, string> } {
