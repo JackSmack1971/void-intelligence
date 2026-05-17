@@ -1,89 +1,87 @@
-import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 import MergePreview from "./MergePreview";
-import { KnowledgeTriplet as Triplet } from "@/lib/goa";
 
-describe("MergePreview [RED]", () => {
-  const mockNew: Triplet[] = [
-    { subject: "A", predicate: "is", object: "B" },
-    { subject: "C", predicate: "is", object: "D" }
+describe("MergePreview Component [GREEN]", () => {
+  const added = [
+    { subject: "AI", predicate: "uses", object: "LLM" },
+    { subject: "User", predicate: "queries", object: "Database" }
   ];
-  const mockOverlaps: Triplet[] = [
-    { subject: "E", predicate: "is", object: "F" }
+  const modified = [
+    {
+      original: { subject: "Model", predicate: "generates", object: "Text" },
+      updated: { subject: "Model", predicate: "generates", object: "Embeddings" }
+    }
+  ];
+  const overlaps = [
+    { subject: "Existing", predicate: "is", object: "Cached" }
   ];
 
-  it("should render incoming trail title, stats cards, and new items correctly", () => {
-    render(
-      <MergePreview 
-        newItems={mockNew} 
-        overlaps={mockOverlaps} 
-        onConfirm={() => {}} 
-        onCancel={() => {}} 
-      />
-    );
+  it("should switch tabs, show counts, and highlight original-to-updated diffs", () => {
+    render(<MergePreview added={added} modified={modified} overlaps={overlaps} />);
 
-    expect(screen.getByText("Incoming Intelligence Trail")).toBeDefined();
-    expect(screen.getByText("Ingestible Relations")).toBeDefined();
-    expect(screen.getByText("A")).toBeDefined();
-    expect(screen.getByText("C")).toBeDefined();
+    // Ingestible count
+    expect(screen.getByText("2")).toBeDefined();
+    // Modified and Overlaps both have count 1
+    expect(screen.getAllByText("1")).toHaveLength(2);
+
+    // Default tab
+    expect(screen.getByText("Relations Pending Ingestion")).toBeDefined();
+
+    // Click tab-modified
+    const tabModified = screen.getByTestId("tab-modified");
+    fireEvent.click(tabModified);
+    expect(screen.getByText("Modified Target Relations")).toBeDefined();
+    expect(screen.getByText("Original:")).toBeDefined();
+    expect(screen.getByText("Updated:")).toBeDefined();
+
+    // Click tab-overlaps
+    const tabOverlaps = screen.getByTestId("tab-overlaps");
+    fireEvent.click(tabOverlaps);
+    expect(screen.getByText("Identified Database Duplicates")).toBeDefined();
   });
 
-  it("should switch tabs to Conflicting Overlaps and display overlaps as read-only cards", () => {
-    render(
-      <MergePreview 
-        newItems={mockNew} 
-        overlaps={mockOverlaps} 
-        onConfirm={() => {}} 
-        onCancel={() => {}} 
-      />
-    );
+  it("should handle select/deselect and emit selected delta arrays on confirm", () => {
+    const onConfirm = vi.fn();
+    render(<MergePreview added={added} modified={modified} overlaps={overlaps} onConfirm={onConfirm} />);
 
-    // Switch to Overlaps tab button
-    const overlapsTabBtn = screen.getByTestId("tab-overlaps");
-    expect(overlapsTabBtn).toBeDefined();
-    
-    // Click overlaps tab
-    fireEvent.click(overlapsTabBtn);
+    // Ingestible view, click Deselect All
+    fireEvent.click(screen.getByText("Deselect All"));
 
-    // E is B overlap should be visible
-    expect(screen.getByText("E")).toBeDefined();
-    expect(screen.getByText("Existing Overlap (Read-Only)")).toBeDefined();
-  });
+    // Switch to Modified tab, click Deselect All
+    fireEvent.click(screen.getByTestId("tab-modified"));
+    fireEvent.click(screen.getByText("Deselect All"));
 
-  it("should call onConfirm with selected items when clicking merge button", () => {
-    const confirmSpy = vi.fn();
-    render(
-      <MergePreview 
-        newItems={mockNew} 
-        overlaps={mockOverlaps} 
-        onConfirm={confirmSpy} 
-        onCancel={() => {}} 
-      />
-    );
-
-    // Click confirm button
+    // Merge button is disabled because both selections are empty
     const mergeBtn = screen.getByText("Merge Intelligence");
+    expect(mergeBtn.hasAttribute("disabled")).toBe(true);
+
+    // Re-select all on Modified
+    fireEvent.click(screen.getByText("Select All"));
+
+    // Switch to Ingestible (added) tab
+    fireEvent.click(screen.getByTestId("tab-added"));
+    // Re-select all on Added
+    fireEvent.click(screen.getByText("Select All"));
+
+    // Confirm
     fireEvent.click(mergeBtn);
 
-    expect(confirmSpy).toHaveBeenCalledWith(mockNew);
+    expect(onConfirm).toHaveBeenCalledWith(added, modified);
   });
 
-  it("should call onCancel when abort or close is triggered", () => {
-    const cancelSpy = vi.fn();
-    render(
-      <MergePreview 
-        newItems={mockNew} 
-        overlaps={mockOverlaps} 
-        onConfirm={() => {}} 
-        onCancel={cancelSpy} 
-      />
-    );
+  it("should fall back gracefully to legacy newItems and overlaps props for backward compatibility", () => {
+    const onConfirm = vi.fn();
+    render(<MergePreview newItems={added} overlaps={overlaps} onConfirm={onConfirm} />);
 
-    // Click abort button
-    const abortBtn = screen.getByText("Abort Ingestion");
-    fireEvent.click(abortBtn);
+    // Ingestible count
+    expect(screen.getByText("2")).toBeDefined();
+    // Overlaps count
+    expect(screen.getByText("1")).toBeDefined();
 
-    expect(cancelSpy).toHaveBeenCalled();
+    // Confirm
+    fireEvent.click(screen.getByText("Merge Intelligence"));
+    expect(onConfirm).toHaveBeenCalledWith(added, []);
   });
 });
