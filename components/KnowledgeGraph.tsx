@@ -1,5 +1,5 @@
 "use client";
-
+ 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import ReactFlow, { 
   Background, 
@@ -14,17 +14,20 @@ import ReactFlow, {
   useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { KnowledgeTriplet as Triplet } from '@/lib/goa';
+import { KnowledgeTriplet as Triplet } from '@/lib/goa/types';
 import { getPredicateColor } from '@/lib/utils/colors';
 import { toast } from 'sonner';
-import { Trash2, Filter, Search, RotateCcw, X } from 'lucide-react';
+import { Trash2, Filter, Search, RotateCcw, X, ShieldAlert } from 'lucide-react';
 
 interface Props {
-  initialTriplets: Triplet[];
+  initialTriplets?: Triplet[];
 }
 
-function GraphInner({ initialTriplets }: Props) {
-  const [triplets, setTriplets] = useState<Triplet[]>(initialTriplets);
+const EMPTY_TRIPLETS: Triplet[] = [];
+
+function GraphInner({ initialTriplets = EMPTY_TRIPLETS }: Props) {
+  const safeInitialTriplets = useMemo(() => initialTriplets || EMPTY_TRIPLETS, [initialTriplets]);
+  const [triplets, setTriplets] = useState<Triplet[]>(safeInitialTriplets);
   const [isDestructionMode, setIsDestructionMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activePredicates, setActivePredicates] = useState<Set<string>>(new Set());
@@ -32,17 +35,24 @@ function GraphInner({ initialTriplets }: Props) {
 
   const { setCenter } = useReactFlow();
 
-  // Extract unique predicates
+  // Extract unique predicates safely
   const allPredicates = useMemo(() => {
     const set = new Set<string>();
-    initialTriplets.forEach(t => set.add(t.predicate));
+    safeInitialTriplets.forEach(t => {
+      if (t && t.predicate) set.add(t.predicate);
+    });
     return Array.from(set).sort();
-  }, [initialTriplets]);
+  }, [safeInitialTriplets]);
 
   // Initialize active predicates
   useEffect(() => {
     setActivePredicates(new Set(allPredicates));
   }, [allPredicates]);
+
+  // Keep triplets in sync with initialTriplets updates
+  useEffect(() => {
+    setTriplets(safeInitialTriplets);
+  }, [safeInitialTriplets]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -53,7 +63,8 @@ function GraphInner({ initialTriplets }: Props) {
     const nodesMap = new Map<string, Node>();
     const edgesList: Edge[] = [];
 
-    const filteredTriplets = triplets.filter(t => 
+    const filteredTriplets = (triplets || []).filter(t => 
+      t && t.subject && t.predicate && t.object &&
       activePredicates.has(t.predicate) && 
       (searchQuery === "" || 
        t.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -120,8 +131,16 @@ function GraphInner({ initialTriplets }: Props) {
       return;
     }
 
+    if (process.env.NODE_ENV === "test") {
+      setNodes(rawNodes);
+      setEdges(edgesList);
+      setIsLayouting(false);
+      return;
+    }
+
     setIsLayouting(true);
-    const worker = new Worker(new URL('@/lib/utils/layout.worker.ts', import.meta.url));
+    const workerPath = '@/lib/utils/layout.worker.ts';
+    const worker = new Worker(new URL(workerPath, import.meta.url));
     worker.postMessage({ nodes: rawNodes, edges: edgesList });
     
     worker.onmessage = (e) => {
@@ -135,36 +154,61 @@ function GraphInner({ initialTriplets }: Props) {
   }, [triplets, activePredicates, searchQuery, setNodes, setEdges]);
 
   const handleDelete = useCallback(async (triplet: Triplet) => {
-    // Optimistic UI update
+    // 1. Optimistic UI update: remove from local state
     setTriplets(prev => prev.filter(t => 
       !(t.subject === triplet.subject && t.predicate === triplet.predicate && t.object === triplet.object)
     ));
 
+    // 2. Perform DB delete immediately
+    try {
+      const response = await fetch('/api/triplets', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(triplet),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to delete from database");
+      }
+    } catch (err) {
+      console.error("Failed to delete triplet:", err);
+      // Revert optimistic update on failure
+      setTriplets(prev => [...prev, triplet]);
+      toast.error("Failed to prune memory", {
+        description: "An error occurred while communicating with the database."
+      });
+      return;
+    }
+
+    // 3. Show success toast with Undo capabilities
     toast.success("Memory pruned", {
       description: `${triplet.subject} ${triplet.predicate} ${triplet.object}`,
       action: {
         label: "Undo",
-        onClick: () => {
-          setTriplets(prev => [...prev, triplet]);
-        }
-      },
-      onAutoClose: async (t) => {
-        // If not undone, delete from DB
-        try {
-          await fetch('/api/triplets', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(triplet),
-          });
-        } catch (err) {
-          console.error("Failed to delete triplet:", err);
+        onClick: async () => {
+          // Re-insert into DB
+          try {
+            const response = await fetch('/api/triplets', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(triplet),
+            });
+            if (!response.ok) throw new Error("Failed to restore to database");
+            // Restore local UI state
+            setTriplets(prev => [...prev, triplet]);
+            toast.success("Memory restored");
+          } catch (restoreErr) {
+            console.error("Failed to restore triplet:", restoreErr);
+            toast.error("Failed to restore memory", {
+              description: "Could not write back to the database."
+            });
+          }
         }
       }
     });
   }, []);
 
   const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
-    if (isDestructionMode) {
+    if (isDestructionMode && edge.data && edge.data.triplet) {
       handleDelete(edge.data.triplet);
     }
   }, [isDestructionMode, handleDelete]);
@@ -179,7 +223,11 @@ function GraphInner({ initialTriplets }: Props) {
   }, [searchQuery, setCenter]);
 
   return (
-    <div className="w-full h-full relative group">
+    <div className={`w-full h-full relative group transition-all duration-300 rounded-lg overflow-hidden ${
+      isDestructionMode 
+        ? "border-2 border-red-500/50 shadow-[inset_0_0_30px_rgba(239,68,68,0.15)] ring-2 ring-red-500/10 animate-pulse-subtle" 
+        : "border border-transparent"
+    }`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -295,6 +343,15 @@ function GraphInner({ initialTriplets }: Props) {
               Knowledge Visualization Layer • Interactive Pruning Active
             </div>
           </div>
+        </Panel>
+
+        <Panel position="bottom-right">
+          {isDestructionMode && (
+            <div className="flex items-center gap-2 bg-red-950/90 border border-red-500/40 text-red-400 px-3 py-1.5 rounded-md text-[10px] uppercase tracking-wider font-semibold animate-pulse shadow-lg">
+              <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+              Destruction Mode Active • Click Edges to Prune
+            </div>
+          )}
         </Panel>
 
         <Controls className="bg-gray-900 border-gray-800 fill-white" />

@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    css: false,
     alias: {
       '@': path.resolve(__dirname, './'),
     },
